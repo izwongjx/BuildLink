@@ -450,9 +450,6 @@ export default function HomeownerProject() {
             onAdded={handleAdded}
           />
         )}
-        {wizardOpen && (
-          <HomeownerWizard onClose={() => setWizardOpen(false)} onCreated={handleWizardCreated} />
-        )}
       </AnimatePresence>
     </div>
   );

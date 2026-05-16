@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FolderOpen, Plus, MapPin, Users, ArrowRight, MoreHorizontal, Check } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import { getProjects, Project, ProjectStatus } from '../lib/projects';
-import CreateProjectModal from '../components/projects/CreateProjectModal';
+import HomeownerWizard from '../components/projects/HomeownerWizard';
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string; bg: string }> = {
   assembling: { label: 'Assembling', color: '#F59E0B', bg: '#FEF3C7' },
@@ -150,7 +150,7 @@ export default function MyProjectsPage() {
   const handleCreated = (p: Project) => {
     setCreateOpen(false);
     setProjects(getProjects());
-    navigate(`/dashboard/homeowner`);
+    navigate(`/dashboard/homeowner/${p.id}`);
   };
 
   const handleOpen = (id: string) => {
@@ -228,7 +228,10 @@ export default function MyProjectsPage() {
 
       <AnimatePresence>
         {createOpen && (
-          <CreateProjectModal onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
+          <HomeownerWizard
+            onClose={() => setCreateOpen(false)}
+            onCreated={handleCreated}
+          />
         )}
       </AnimatePresence>
     </div>
