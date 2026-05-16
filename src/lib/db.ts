@@ -45,4 +45,7 @@ export const clearData = () => {
   localStorage.removeItem('buildlink_suppliers');
   localStorage.removeItem('buildlink_homeowner_projects');
 };
-
+export const getProvider = (type: string, id: string | number) => {
+  const list = type === 'contractor' ? getContractors() : getSuppliers();
+  return list.find((p: any) => String(p.id) === String(id));
+};

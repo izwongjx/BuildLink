@@ -218,7 +218,7 @@ export default function ContractorDashboard() {
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_contractor');
   const contractorData = useMemo(() => {
     const data = localStorage.getItem('buildlink_contractor_data');
-    return data ? JSON.parse(data) : { services: ['Plumbing', 'Electrical'] };
+    return data ? JSON.parse(data) : { tags: ['Plumbing', 'Electrical'] };
   }, []);
 
   const contractorId = useMemo(() => {
@@ -256,7 +256,7 @@ export default function ContractorDashboard() {
 
   const filteredHomeowners = useMemo(() => {
     return projects.map(p => {
-      const services = contractorData.services || [];
+      const services = contractorData.tags || contractorData.services || [];
       const matchCount = p.servicesNeeded?.filter((s: string) =>
         services.some((cs: string) => cs.toLowerCase().includes(s.toLowerCase()))
       ).length || 0;
@@ -397,7 +397,7 @@ export default function ContractorDashboard() {
                           )) : (
                             <div className="py-20 text-center border-2 border-dashed border-border rounded-[24px]">
                               <p className="text-text-muted font-bold">No homeowners currently seeking your specific services.</p>
-                              <p className="text-sm text-text-muted mt-2">Your services: {contractorData.services?.join(', ')}</p>
+                              <p className="text-sm text-text-muted mt-2">Your services: {(contractorData.tags || contractorData.services || []).join(', ')}</p>
                             </div>
                           )
                         ) : (

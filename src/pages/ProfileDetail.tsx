@@ -8,11 +8,19 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { cn } from '@/lib/utils';
 
+import { getProvider } from '@/lib/db';
+
 export default function ProfileDetail() {
   const { type, id } = useParams();
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [activeGalleryTab, setActiveGalleryTab] = useState(0);
+
+  // Fetch real data from db (localStorage + initial)
+  const provider = useMemo(() => {
+    if (!type || !id) return null;
+    return getProvider(type, id);
+  }, [type, id]);
 
   useEffect(() => {
     const saved = localStorage.getItem('buildlink_saved_matches');
@@ -23,10 +31,9 @@ export default function ProfileDetail() {
     window.scrollTo(0, 0);
   }, [id, type]);
 
-  // Mock data based on type
+  // Fallback to mock if not found in db
   const isContractor = type === 'contractor';
-  
-  const data = isContractor ? {
+  const data = provider || (isContractor ? {
     name: 'Apex Renovations',
     role: 'Contractor',
     location: 'Kuala Lumpur',
@@ -65,7 +72,10 @@ export default function ProfileDetail() {
       { id: 2, title: 'Engineered Pine', url: '/timber_supplier_warehouse.png' },
     ],
     coverage: 'Klang Valley, Penang, Johor'
-  };
+  });
+
+  // Map "portfolio" to "gallery" for consistency if needed
+  const gallery = data.portfolio || data.gallery || [];
 
   const handleBookmark = () => {
     const saved = localStorage.getItem('buildlink_saved_matches');
@@ -186,7 +196,7 @@ export default function ProfileDetail() {
                     {isContractor ? 'Recent Projects' : 'Product Catalogue'}
                   </h2>
                   <div className="flex gap-2">
-                    {data.gallery.map((_, i) => (
+                    {gallery.map((_, i) => (
                       <button 
                         key={i}
                         onClick={() => setActiveGalleryTab(i)}
@@ -201,21 +211,25 @@ export default function ProfileDetail() {
 
                 <div className="relative aspect-[16/9] rounded-[32px] overflow-hidden group border border-border shadow-2xl">
                   <AnimatePresence mode="wait">
-                    <motion.img 
-                      key={activeGalleryTab}
-                      initial={{ opacity: 0, scale: 1.05 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                      src={data.gallery[activeGalleryTab].url} 
-                      className="w-full h-full object-cover"
-                      alt={data.gallery[activeGalleryTab].title}
-                    />
+                    {gallery.length > 0 ? (
+                      <motion.img 
+                        key={activeGalleryTab}
+                        initial={{ opacity: 0, scale: 1.05 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                        src={gallery[activeGalleryTab]?.url} 
+                        className="w-full h-full object-cover"
+                        alt={gallery[activeGalleryTab]?.title}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-surface flex items-center justify-center text-text-muted font-bold">No portfolio images available</div>
+                    )}
                   </AnimatePresence>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
                   <div className="absolute bottom-10 left-10 text-white">
                     <div className="text-[11px] font-black uppercase tracking-[0.2em] mb-2 text-white/70">Portfolio Item</div>
-                    <h3 className="text-3xl font-black tracking-tight">{data.gallery[activeGalleryTab].title}</h3>
+                    <h3 className="text-3xl font-black tracking-tight">{gallery[activeGalleryTab]?.title || 'Work Preview'}</h3>
                   </div>
                 </div>
               </motion.section>
@@ -325,7 +339,7 @@ export default function ProfileDetail() {
                 <div className="px-6">
                   <h3 className="text-xs font-black uppercase tracking-widest text-text-muted mb-6">Coverage Areas</h3>
                   <div className="flex flex-wrap gap-2">
-                    {data.coverage.split(', ').map(area => (
+                    {(data.coverage || data.location || 'Klang Valley').split(', ').map(area => (
                       <span key={area} className="text-sm font-bold text-[#111] flex items-center gap-2">
                         <MapPin size={14} className="text-accent" />
                         {area}

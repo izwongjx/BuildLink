@@ -24,6 +24,8 @@ export default function ContractorOnboarding() {
 
   const [businessName, setBusinessName] = useState('');
   const [location, setLocation] = useState('');
+  const [about, setAbout] = useState('');
+  const [portfolio, setPortfolio] = useState<string[]>([]);
 
   const nextStep = () => {
     if (step < totalSteps) {
@@ -35,7 +37,14 @@ export default function ContractorOnboarding() {
         location: location || 'Malaysia',
         tags: selectedServices,
         rating: 5.0,
-        price: selectedPrice || 'Mid-Range'
+        price: selectedPrice || 'Mid-Range',
+        about: about || "Expert contractor dedicated to high-quality craftsmanship and reliable service.",
+        portfolio: portfolio.length > 0 ? portfolio.map((url, i) => ({ id: i, title: `Project ${i+1}`, url })) : [
+          { id: 1, title: 'Modern Renovation', url: '/modern_kitchen_renovation.png' },
+          { id: 2, title: 'Luxury Detail', url: '/modern_bathroom_detail.png' }
+        ],
+        certs: selectedCerts.length > 0 ? selectedCerts : ['Verified Builder'],
+        role: 'Contractor'
       };
 
       // 1. Add to global list for homeowners to see
@@ -44,7 +53,7 @@ export default function ContractorOnboarding() {
       localStorage.setItem('buildlink_contractors', JSON.stringify([...contractors, newContractor]));
 
       // 2. Save individual session data for matching
-      localStorage.setItem('buildlink_contractor_data', JSON.stringify({ services: selectedServices }));
+      localStorage.setItem('buildlink_contractor_data', JSON.stringify(newContractor));
       localStorage.setItem('buildlink_onboarded_contractor', 'true');
       
       navigate('/dashboard/contractor');
@@ -143,18 +152,43 @@ export default function ContractorOnboarding() {
               <motion.div key="c3" custom={1} variants={slideVars} initial="initial" animate="animate" exit="exit">
                 <h1 className="text-3xl font-bold tracking-tight mb-8">Portfolio</h1>
                 <div className="mb-8">
-                  <label className="block text-sm font-medium mb-2">Upload past work (up to 6 images)</label>
+                  <label className="block text-sm font-medium mb-4">Upload past work (Select to add demo images)</label>
                   <div className="grid grid-cols-3 gap-4">
-                    {[1,2,3,4,5,6].map(i => (
-                      <div key={i} className="aspect-square rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-surface hover:bg-accent-light/10 transition-colors cursor-pointer">
-                        <span className="text-text-muted text-2xl">+</span>
+                    {portfolio.map((url, i) => (
+                      <div key={i} className="aspect-square rounded-xl overflow-hidden relative group">
+                        <img src={url} alt="Portfolio" className="w-full h-full object-cover" />
+                        <button 
+                          onClick={() => setPortfolio(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
+                    {portfolio.length < 6 && (
+                      <button 
+                        onClick={() => {
+                          const demo = [
+                            '/modern_kitchen_renovation.png',
+                            '/modern_bathroom_detail.png',
+                            '/timber_supplier_warehouse.png'
+                          ];
+                          const next = demo[portfolio.length % demo.length];
+                          setPortfolio(prev => [...prev, next]);
+                        }}
+                        className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-surface hover:bg-accent-light/10 transition-colors cursor-pointer"
+                      >
+                        <span className="text-text-muted text-2xl">+</span>
+                        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider mt-1">Add Image</span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="mb-6">
                   <label className="block text-sm font-medium mb-2">Bio / About</label>
                   <textarea 
+                    value={about}
+                    onChange={(e) => setAbout(e.target.value)}
                     className="flex w-full rounded-xl border border-border bg-surface px-4 py-3 text-base placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus-visible:border-accent min-h-[100px] resize-none"
                     placeholder="Tell clients about your expertise..."
                   />
