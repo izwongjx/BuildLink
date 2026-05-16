@@ -15,7 +15,8 @@ export default function SupplierOnboarding() {
 
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedCerts, setSelectedCerts] = useState<string[]>([]);
-  const [products, setProducts] = useState([{ id: 1, name: '', cat: '', price: '', unit: '' }]);
+  const [products, setProducts] = useState([{ id: 1, name: '', cat: '', price: '', unit: '', image: '' }]);
+  const [about, setAbout] = useState('');
 
   const slideVars = {
     initial: (direction: number) => ({ x: direction > 0 ? 40 : -40, opacity: 0 }),
@@ -36,7 +37,13 @@ export default function SupplierOnboarding() {
         location: location || 'Malaysia',
         tags: selectedCats,
         rating: 5.0,
-        price: 'Mid-Range'
+        price: 'Mid-Range',
+        about: about || "Leading supplier of premium building materials and hardware.",
+        portfolio: products.filter(p => p.image).map((p, i) => ({ id: i, title: p.name || `Product ${i+1}`, url: p.image })) || [
+          { id: 1, title: 'Premium Material', url: '/timber_supplier_warehouse.png' }
+        ],
+        certs: selectedCerts.length > 0 ? selectedCerts : ['Quality Guaranteed'],
+        role: 'Supplier'
       };
 
       // 1. Add to global list for homeowners/contractors to see
@@ -45,7 +52,7 @@ export default function SupplierOnboarding() {
       localStorage.setItem('buildlink_suppliers', JSON.stringify([...suppliers, newSupplier]));
 
       // 2. Save individual session data for matching
-      localStorage.setItem('buildlink_supplier_data', JSON.stringify({ categories: selectedCats }));
+      localStorage.setItem('buildlink_supplier_data', JSON.stringify(newSupplier));
       localStorage.setItem('buildlink_onboarded_supplier', 'true');
       
       navigate('/dashboard/supplier');
@@ -136,26 +143,51 @@ export default function SupplierOnboarding() {
             {step === 3 && (
               <motion.div key="s3" custom={1} variants={slideVars} initial="initial" animate="animate" exit="exit">
                 <h1 className="text-3xl font-bold tracking-tight mb-8">Product Listings</h1>
-                <p className="text-text-muted mb-6">Add a few key products to get matched with contractors.</p>
+                <p className="text-text-muted mb-6">Add a few key products and images to get matched with contractors.</p>
                 <div className="flex flex-col gap-6">
                   {products.map((p, idx) => (
-                    <Card key={p.id} className="p-4 flex flex-col gap-4 bg-surface">
+                    <Card key={p.id} className="p-4 flex flex-col gap-4 bg-surface border-border border">
                       <div className="flex justify-between items-center">
-                        <span className="font-medium text-sm text-text-muted">Product {idx + 1}</span>
+                        <span className="font-medium text-sm text-text-muted uppercase tracking-wider">Product {idx + 1}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <Input placeholder="Product Name" />
-                        <Input placeholder="Category" />
-                        <Input placeholder="Unit Price Range" />
-                        <Input placeholder="Unit Type (e.g. sqft, piece)" />
+                      <div className="flex flex-col md:flex-row gap-6">
+                        <button 
+                          onClick={() => {
+                            const demo = ['/timber_supplier_warehouse.png', '/modern_kitchen_renovation.png'];
+                            const next = demo[idx % demo.length];
+                            setProducts(prev => prev.map((pr, i) => i === idx ? { ...pr, image: next } : pr));
+                          }}
+                          className="w-32 h-32 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-background hover:bg-accent-light/10 transition-colors shrink-0 overflow-hidden"
+                        >
+                          {p.image ? (
+                            <img src={p.image} className="w-full h-full object-cover" alt="Product" />
+                          ) : (
+                            <span className="text-xs font-bold text-text-muted">ADD IMAGE</span>
+                          )}
+                        </button>
+                        <div className="flex-1 grid grid-cols-2 gap-4">
+                          <Input placeholder="Product Name" onChange={(e) => setProducts(prev => prev.map((pr, i) => i === idx ? { ...pr, name: e.target.value } : pr))} />
+                          <Input placeholder="Category" onChange={(e) => setProducts(prev => prev.map((pr, i) => i === idx ? { ...pr, cat: e.target.value } : pr))} />
+                          <Input placeholder="Unit Price Range" />
+                          <Input placeholder="Unit Type" />
+                        </div>
                       </div>
                     </Card>
                   ))}
                   {products.length < 4 && (
-                    <Button variant="ghost" className="w-full" onClick={() => setProducts([...products, { id: Date.now(), name: '', cat: '', price: '', unit: '' }])}>
-                      + Add Product
+                    <Button variant="ghost" className="w-full h-14 border-2 border-dashed rounded-xl" onClick={() => setProducts([...products, { id: Date.now(), name: '', cat: '', price: '', unit: '', image: '' }])}>
+                      + Add Another Product
                     </Button>
                   )}
+                </div>
+                <div className="mt-8">
+                  <label className="block text-sm font-medium mb-2">Company Bio</label>
+                  <textarea 
+                    value={about}
+                    onChange={(e) => setAbout(e.target.value)}
+                    className="flex w-full rounded-xl border border-border bg-surface px-4 py-3 text-base placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus-visible:border-accent min-h-[100px] resize-none"
+                    placeholder="Tell contractors about your logistics and quality standards..."
+                  />
                 </div>
               </motion.div>
             )}

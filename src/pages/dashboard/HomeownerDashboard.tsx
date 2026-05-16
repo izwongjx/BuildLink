@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, MapPin, Check, MoreHorizontal } from 'lucide-react';
 import Navbar from '../../components/layout/Navbar';
 import { getProjects, Project, ProjectStatus, clearAllData } from '../../lib/projects';
-import HomeownerWizard from '../../components/projects/HomeownerWizard';
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string; bg: string; dot: string }> = {
   assembling: { label: 'Assembling',  color: '#F59E0B', bg: '#FEF3C7', dot: '#F59E0B' },
@@ -104,7 +103,6 @@ function ProjectCard({ project, index, onClick }: { project: Project; index: num
 export default function HomeownerDashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_homeowner');
@@ -113,12 +111,9 @@ export default function HomeownerDashboard() {
     const ps = getProjects();
     setProjects(ps);
     setLoaded(true);
-    // Auto-open wizard if first time (no projects yet)
-    if (ps.length === 0) setWizardOpen(true);
   }, []);
 
   const handleCreated = (project: Project) => {
-    setWizardOpen(false);
     setProjects(getProjects());
     navigate(`/dashboard/homeowner/${project.id}`);
   };
@@ -135,7 +130,7 @@ export default function HomeownerDashboard() {
     if (confirm('Delete all projects and data? This cannot be undone.')) {
       clearAllData();
       setProjects([]);
-      setWizardOpen(true);
+      navigate('/projects'); // Go to projects page to start over
     }
   };
 
@@ -165,21 +160,13 @@ export default function HomeownerDashboard() {
               >
                 Clear All
               </button>
-              <motion.button
-                onClick={() => setWizardOpen(true)}
-                whileHover={{ scale: 1.04, boxShadow: '0 6px 20px rgba(232,100,42,0.3)' }}
-                whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-2 px-5 h-11 bg-[#E8642A] text-white font-bold text-[14px] rounded-full shadow-sm"
-              >
-                <Plus size={16} /> New Project
-              </motion.button>
             </div>
           </motion.div>
         )}
 
         {/* Projects */}
         <AnimatePresence>
-          {loaded && projects.length > 0 && (
+          {loaded && projects.length > 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {/* Featured (full-width) */}
               <ProjectCard project={featured} index={0} onClick={() => navigate(`/dashboard/homeowner/${featured.id}`)} />
@@ -193,34 +180,31 @@ export default function HomeownerDashboard() {
                 </div>
               )}
             </motion.div>
+          ) : loaded && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center py-32 text-center"
+            >
+              <div className="w-20 h-20 bg-[#E8642A]/10 rounded-full flex items-center justify-center text-[#E8642A] mb-6">
+                <FolderOpen size={32} />
+              </div>
+              <h2 className="text-[28px] font-black text-[#111] mb-2">No projects yet.</h2>
+              <p className="text-[16px] text-[#888880] max-w-[400px] mb-8">
+                Ready to build something? Start your first project and we'll help you find the perfect team.
+              </p>
+              <motion.button
+                onClick={() => navigate('/projects')}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center gap-2 px-8 h-14 bg-[#E8642A] text-white font-bold text-[16px] rounded-full shadow-xl shadow-[#E8642A]/25"
+              >
+                <Plus size={20} /> Create Your First Project
+              </motion.button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {/* Wizard */}
-      <AnimatePresence>
-        {wizardOpen && (
-          <HomeownerWizard
-            onClose={projects.length > 0 ? () => setWizardOpen(false) : undefined}
-            disableClose={projects.length === 0}
-            onCreated={handleCreated}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* FAB (when projects exist) */}
-      {projects.length > 0 && !wizardOpen && (
-        <motion.button
-          onClick={() => setWizardOpen(true)}
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1, transition: { delay: 0.5, type: 'spring', stiffness: 300, damping: 24 } }}
-          whileHover={{ scale: 1.06, boxShadow: '0 8px 24px rgba(232,100,42,0.35)' }}
-          whileTap={{ scale: 0.95 }}
-          className="fixed bottom-8 right-8 z-40 flex items-center gap-2 px-5 h-12 bg-[#E8642A] text-white font-bold text-[14px] rounded-full shadow-lg shadow-[#E8642A]/30"
-        >
-          <Plus size={18} /> New Project
-        </motion.button>
-      )}
     </div>
   );
 }

@@ -48,7 +48,7 @@ export default function SupplierDashboard() {
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_supplier');
   const supplierData = useMemo(() => {
     const data = localStorage.getItem('buildlink_supplier_data');
-    return data ? JSON.parse(data) : { categories: ['Timber & Wood'] };
+    return data ? JSON.parse(data) : { tags: ['Timber & Wood'] };
   }, []);
 
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function SupplierDashboard() {
 
   const filteredContractors = useMemo(() => {
     return contractors.map(c => {
-      const supplierCats = supplierData.categories || [];
+      const supplierCats = supplierData.tags || supplierData.categories || [];
       const matchCount = c.tags.filter((t: string) => 
         supplierCats.some((sc: string) => sc.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(sc.toLowerCase()))
       ).length;
@@ -219,7 +219,7 @@ export default function SupplierDashboard() {
                                 ))}
                               </div>
                               <div className="text-sm font-bold text-text-muted italic">
-                                Potential buyer for your {supplierData.categories?.join(', ')} catalog.
+                                Potential buyer for your {(supplierData.tags || supplierData.categories || []).join(', ')} catalog.
                               </div>
                             </div>
                             <div className="flex flex-col gap-3 shrink-0">
