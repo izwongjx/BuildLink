@@ -103,7 +103,6 @@ function ProjectCard({ project, index, onClick }: { project: Project; index: num
 export default function HomeownerDashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_homeowner');
@@ -195,18 +194,13 @@ export default function HomeownerDashboard() {
                 Ready to build something? Start your first project and we'll help you find the perfect team.
               </p>
               <motion.button
-                onClick={() => setWizardOpen(true)}
+                onClick={() => navigate('/projects')}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="flex items-center gap-2 px-8 h-14 bg-[#E8642A] text-white font-bold text-[16px] rounded-full shadow-xl shadow-[#E8642A]/25"
               >
                 <Plus size={20} /> Create Your First Project
               </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
             </motion.div>
           )}
         </AnimatePresence>
