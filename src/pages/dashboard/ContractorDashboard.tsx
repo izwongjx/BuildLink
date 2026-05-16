@@ -8,7 +8,7 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { getHomeownerProjects, getSuppliers } from '../../lib/db';
-import { getProjects, addNotification } from '../../lib/projects';
+import { getProjects, getProject, updateProject, addNotification } from '../../lib/projects';
 import Navbar from '../../components/layout/Navbar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ export default function ContractorDashboard() {
     const myInvites: Invitation[] = [];
     allProjects.forEach(p => {
       p.team.forEach(m => {
-        if (m.type === 'contractor') {
+        if (m.type === 'contractor' && m.status !== 'declined') {
           myInvites.push({
             id: `${p.id}-${m.profileId}`,
             projectId: p.id,
@@ -269,6 +269,13 @@ export default function ContractorDashboard() {
     setInvitations(prev => prev.map(i => i.id === invId ? { ...i, status: 'accepted' } : i));
     const inv = invitations.find(i => i.id === invId);
     if (inv) {
+      const p = getProject(inv.projectId);
+      if (p) {
+        p.team = p.team.map(m => 
+          `${p.id}-${m.profileId}` === invId ? { ...m, status: 'accepted', respondedAt: Date.now() } : m
+        );
+        updateProject(p);
+      }
       addNotification({
         projectId: inv.projectId,
         projectName: inv.projectName,
@@ -286,6 +293,13 @@ export default function ContractorDashboard() {
     setInvitations(prev => prev.filter(i => i.id !== invId));
     const inv = invitations.find(i => i.id === invId);
     if (inv) {
+      const p = getProject(inv.projectId);
+      if (p) {
+        p.team = p.team.map(m => 
+          `${p.id}-${m.profileId}` === invId ? { ...m, status: 'declined', respondedAt: Date.now() } : m
+        );
+        updateProject(p);
+      }
       addNotification({
         projectId: inv.projectId,
         projectName: inv.projectName,
@@ -411,7 +425,7 @@ export default function ContractorDashboard() {
                                     <p className="text-xs text-text-muted font-semibold">{s.location}</p>
                                   </div>
                                 </div>
-                                <Button variant="ghost" className="font-bold">View Products</Button>
+                                <Button variant="ghost" className="font-bold" onClick={() => navigate(`/profile/supplier/${s.id}`)}>View Products</Button>
                               </Card>
                             </motion.div>
                           )) : (

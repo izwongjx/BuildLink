@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { Truck, MapPin, Package, Sparkles, ArrowRight, Inbox, Check, X, ChevronDown, Loader2, ExternalLink } from 'lucide-react';
+import { Truck, MapPin, Package, Sparkles, ArrowRight, Inbox, Check, X, ChevronDown, Loader2, ExternalLink, MessageSquare, Eye } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { getContractors } from '../../lib/db';
@@ -11,8 +11,39 @@ import Navbar from '../../components/layout/Navbar';
 export default function SupplierDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'ai' | 'listings' | 'invitations'>('ai');
+  const INITIAL_PRODUCTS = [
+    { id: 1, name: 'Premium Teak Wood', cat: 'Timber & Wood', price: 'RM 45-60', unit: 'sqft' },
+    { id: 2, name: 'Oak Laminate Flooring', cat: 'Flooring', price: 'RM 12-18', unit: 'sqft' },
+    { id: 3, name: 'Solid Wood Doors', cat: 'Doors & Windows', price: 'RM 450+', unit: 'piece' },
+  ];
+  const [products, setProducts] = useState<any[]>(() => {
+    const saved = localStorage.getItem('buildlink_supplier_products');
+    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const saveProducts = (updated: any[]) => {
+    setProducts(updated);
+    localStorage.setItem('buildlink_supplier_products', JSON.stringify(updated));
+  };
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [inquiriesList, setInquiriesList] = useState<any[]>(() => {
+    const saved = localStorage.getItem('buildlink_inquiries');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 1, from: 'KL Design & Build', product: 'Premium Teak Wood', date: 'Today', status: 'New' },
+      { id: 2, from: 'Homeowner JD', product: 'Solid Wood Doors', date: 'Yesterday', status: 'Replied' },
+      { id: 3, from: 'Solid Fix Co.', product: 'Oak Laminate Flooring', date: '3 days ago', status: 'Closed' },
+    ];
+  });
+
+  const handleStatusChange = (id: number, status: string) => {
+    const updated = inquiriesList.map(inq => inq.id === id ? { ...inq, status } : inq);
+    setInquiriesList(updated);
+    localStorage.setItem('buildlink_inquiries', JSON.stringify(updated));
+  };
   const [contractors, setContractors] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
+  const [contractorLeads, setContractorLeads] = useState<any[]>([]);
 
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_supplier');
   const supplierData = useMemo(() => {
@@ -44,6 +75,10 @@ export default function SupplierDashboard() {
       });
     });
     setInvitations(myInvites);
+
+    // Load contractor leads (from inquiry submissions)
+    const leadsRaw = localStorage.getItem('buildlink_contractor_leads');
+    if (leadsRaw) setContractorLeads(JSON.parse(leadsRaw));
   }, [isOnboarded, navigate]);
 
   const filteredContractors = useMemo(() => {
@@ -126,6 +161,39 @@ export default function SupplierDashboard() {
                 <div className="space-y-8">
                   <h2 className="text-2xl font-black text-[#111] uppercase tracking-tight">Contractors Needing Your Materials</h2>
                   <motion.div variants={containerVars} initial="hidden" animate="visible" className="grid gap-6">
+                    {/* Contractor leads from inquiries */}
+                    {contractorLeads.map((lead: any) => (
+                      <motion.div variants={itemVars} key={lead.id}>
+                        <Card className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-8 border-none shadow-xl rounded-[28px] bg-white group hover:shadow-2xl transition-all">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-4 mb-4">
+                              <div className="w-12 h-12 rounded-full bg-accent text-white flex items-center justify-center font-black text-lg">
+                                {lead.name.charAt(0)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-black text-2xl text-[#111]">{lead.name}</h3>
+                                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-black uppercase tracking-wider rounded-full">Inquired</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-sm font-bold text-text-muted uppercase tracking-wider">
+                                  <MapPin size={14} /> {lead.location}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm font-bold text-[#E8642A] mb-2">Requesting: {lead.product}</div>
+                            <div className="flex flex-wrap gap-2">
+                              {lead.tags?.map((t: string) => (
+                                <span key={t} className="px-3 py-1 bg-surface border border-border rounded-lg text-[11px] font-bold text-[#111] uppercase tracking-wider">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-3 shrink-0">
+                            <Button className="h-12 px-8 rounded-xl font-black" onClick={() => setActiveTab('inquiries')}>View Inquiry</Button>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    ))}
+                    {/* AI-matched contractors */}
                     {filteredContractors.length > 0 ? (
                       filteredContractors.map((c) => (
                         <motion.div variants={itemVars} key={c.id}>
@@ -161,11 +229,11 @@ export default function SupplierDashboard() {
                           </Card>
                         </motion.div>
                       ))
-                    ) : (
+                    ) : contractorLeads.length === 0 ? (
                       <div className="py-20 text-center border-2 border-dashed border-border rounded-[32px]">
                         <p className="text-text-muted font-bold">No contractors currently needing your material categories.</p>
                       </div>
-                    )}
+                    ) : null}
                   </motion.div>
                 </div>
               )}
@@ -176,15 +244,11 @@ export default function SupplierDashboard() {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">Product Listings</h2>
-                <Button size="sm">+ Add New Product</Button>
+                <Button size="sm" onClick={() => setEditingProduct({ id: Date.now(), name: '', cat: '', price: '', unit: '', isNew: true })}>+ Add New Product</Button>
               </div>
               <motion.div variants={containerVars} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {[
-                  { name: 'Premium Teak Wood', cat: 'Timber & Wood', price: 'RM 45-60', unit: 'sqft' },
-                  { name: 'Oak Laminate Flooring', cat: 'Flooring', price: 'RM 12-18', unit: 'sqft' },
-                  { name: 'Solid Wood Doors', cat: 'Doors & Windows', price: 'RM 450+', unit: 'piece' },
-                ].map((p, i) => (
-                  <motion.div variants={itemVars} key={i}>
+                {products.map((p) => (
+                  <motion.div variants={itemVars} key={p.id}>
                     <Card className="p-5 flex flex-col h-full">
                       <div className="flex justify-between items-start mb-4">
                         <div className="w-10 h-10 rounded-lg bg-tag flex items-center justify-center text-text-muted">
@@ -194,7 +258,7 @@ export default function SupplierDashboard() {
                       </div>
                       <h3 className="font-semibold mb-1">{p.name}</h3>
                       <div className="text-sm text-text-muted mb-4">{p.price} / {p.unit}</div>
-                      <Button variant="ghost" className="mt-auto w-full" size="sm">Edit Listing</Button>
+                      <Button variant="ghost" className="mt-auto w-full" size="sm" onClick={() => setEditingProduct(p)}>Edit Listing</Button>
                     </Card>
                   </motion.div>
                 ))}
@@ -204,12 +268,8 @@ export default function SupplierDashboard() {
 
           {activeTab === 'inquiries' && (
             <motion.div variants={containerVars} initial="hidden" animate="visible" className="grid gap-4">
-              {[
-                { from: 'KL Design & Build', product: 'Premium Teak Wood', date: 'Today', status: 'New' },
-                { from: 'Homeowner JD', product: 'Solid Wood Doors', date: 'Yesterday', status: 'Replied' },
-                { from: 'Solid Fix Co.', product: 'Oak Laminate Flooring', date: '3 days ago', status: 'Closed' },
-              ].map((inq, i) => (
-                <motion.div variants={itemVars} key={i}>
+              {inquiriesList.map((inq, i) => (
+                <motion.div variants={itemVars} key={inq.id || i}>
                   <Card className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-tag flex items-center justify-center font-bold">
@@ -222,13 +282,23 @@ export default function SupplierDashboard() {
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-xs text-text-muted w-20">{inq.date}</div>
-                      <div className={`text-xs font-medium px-2 py-1 rounded w-16 text-center ${
+                      <div className={`text-xs font-medium px-2 py-1 rounded w-20 text-center ${
                         inq.status === 'New' ? 'bg-accent-light text-accent' : 
-                        inq.status === 'Replied' ? 'bg-tag text-text-primary' : 'bg-transparent border border-border text-text-muted'
+                        inq.status === 'Supplying' ? 'bg-green-100 text-green-700' :
+                        inq.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                        'bg-transparent border border-border text-text-muted'
                       }`}>
                         {inq.status}
                       </div>
-                      <Button variant="ghost" size="sm">Reply</Button>
+                      
+                      {inq.status === 'New' ? (
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50 hover:text-green-700" onClick={() => handleStatusChange(inq.id, 'Supplying')}>Supply</Button>
+                          <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => handleStatusChange(inq.id, 'Rejected')}>Reject</Button>
+                        </div>
+                      ) : (
+                        <Button variant="ghost" size="sm" disabled className="opacity-50">Handled</Button>
+                      )}
                     </div>
                   </Card>
                 </motion.div>
@@ -276,6 +346,116 @@ export default function SupplierDashboard() {
           </Card>
         </aside>
       </div>
+
+      {/* Product Edit Modal */}
+      <AnimatePresence>
+        {editingProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-[#E4E2DC]"
+            >
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold text-[#111]">{editingProduct.isNew ? 'Add New Product' : 'Edit Product'}</h3>
+                <button onClick={() => setEditingProduct(null)} className="text-[#888880] hover:text-[#111]">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-[#111] mb-1">Product Name</label>
+                  <input
+                    type="text"
+                    value={editingProduct.name}
+                    onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                    className="w-full h-11 px-3 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#111] mb-1">Category</label>
+                  <select
+                    value={editingProduct.cat}
+                    onChange={(e) => setEditingProduct({...editingProduct, cat: e.target.value})}
+                    className="w-full h-11 px-3 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A]"
+                  >
+                    <option value="" disabled>Select a category...</option>
+                    <option value="Timber & Wood">Timber & Wood</option>
+                    <option value="Flooring">Flooring</option>
+                    <option value="Doors & Windows">Doors & Windows</option>
+                    <option value="Cement & Concrete">Cement & Concrete</option>
+                    <option value="Bricks & Blocks">Bricks & Blocks</option>
+                    <option value="Roofing">Roofing</option>
+                    <option value="Plumbing Materials">Plumbing Materials</option>
+                    <option value="Electrical Supplies">Electrical Supplies</option>
+                    <option value="Paints & Finishes">Paints & Finishes</option>
+                    <option value="Steel & Metal">Steel & Metal</option>
+                    <option value="Tiles & Ceramics">Tiles & Ceramics</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-[#111] mb-1">Price</label>
+                    <input
+                      type="text"
+                      value={editingProduct.price}
+                      onChange={(e) => setEditingProduct({...editingProduct, price: e.target.value})}
+                      className="w-full h-11 px-3 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A]"
+                      placeholder="e.g. RM 45"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-[#111] mb-1">Unit</label>
+                    <input
+                      type="text"
+                      value={editingProduct.unit}
+                      onChange={(e) => setEditingProduct({...editingProduct, unit: e.target.value})}
+                      className="w-full h-11 px-3 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A]"
+                      placeholder="e.g. sqft"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button 
+                  className="flex-1 rounded-xl h-11 font-bold" 
+                  onClick={() => {
+                    if (editingProduct.isNew) {
+                      saveProducts([...products, { ...editingProduct, id: Date.now() }]);
+                    } else {
+                      saveProducts(products.map((p: any) => p.id === editingProduct.id ? editingProduct : p));
+                    }
+                    setEditingProduct(null);
+                  }}
+                >
+                  Save Product
+                </Button>
+                {!editingProduct.isNew && (
+                  <Button 
+                    variant="ghost" 
+                    className="flex-1 rounded-xl h-11 font-bold text-red-500 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      saveProducts(products.filter((p: any) => p.id !== editingProduct.id));
+                      setEditingProduct(null);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

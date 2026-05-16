@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Star, Award, Phone, Mail, MessageCircle, Bookmark, ShieldCheck, Clock, CheckCircle2, Eye, ArrowLeft, Share2, MoreHorizontal } from 'lucide-react';
+import { MapPin, Star, Award, Phone, Mail, MessageCircle, Bookmark, ShieldCheck, Clock, CheckCircle2, Eye, ArrowLeft, Share2, MoreHorizontal, X } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import { Button } from '../components/ui/Button';
@@ -13,6 +13,9 @@ export default function ProfileDetail() {
   const navigate = useNavigate();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [activeGalleryTab, setActiveGalleryTab] = useState(0);
+  const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
+  const [inquiryProduct, setInquiryProduct] = useState('');
+  const [inquirySent, setInquirySent] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('buildlink_saved_matches');
@@ -41,9 +44,9 @@ export default function ProfileDetail() {
     tags: ['General Contracting', 'Interior Fit-Out', 'Carpentry', 'Smart Home Integration', 'Plumbing', 'Electrical'],
     certs: ['CIDB Registered', 'ISO Certified', 'Insured'],
     gallery: [
-      { id: 1, title: 'Modern Kitchen', url: '/modern_kitchen_renovation.png' },
-      { id: 2, title: 'Luxury Bathroom', url: '/modern_bathroom_detail.png' },
-      { id: 3, title: 'Living Space', url: '/modern_kitchen_renovation.png' },
+      { id: 1, title: 'Modern Kitchen', url: 'https://images.unsplash.com/photo-1556910103-1c02745a872f?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Luxury Bathroom', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=1000' },
+      { id: 3, title: 'Living Space', url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&q=80&w=1000' },
     ],
     coverage: 'Kuala Lumpur, Selangor'
   } : {
@@ -61,9 +64,15 @@ export default function ProfileDetail() {
     tags: ['Timber & Wood', 'Flooring', 'Doors & Windows', 'Plywood', 'MDF'],
     certs: ['ISO Certified', 'SIRIM Approved', 'Sustainable Forestry'],
     gallery: [
-      { id: 1, title: 'Premium Oak', url: '/timber_supplier_warehouse.png' },
-      { id: 2, title: 'Engineered Pine', url: '/timber_supplier_warehouse.png' },
+      { id: 1, title: 'Premium Oak', url: 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Engineered Pine', url: 'https://images.unsplash.com/photo-1616046229478-9901c5536a45?auto=format&fit=crop&q=80&w=1000' },
     ],
+    products: (() => {
+      const saved = localStorage.getItem('buildlink_supplier_products');
+      return saved
+        ? JSON.parse(saved).map((p: any) => p.name)
+        : ['Premium Teak Wood', 'Oak Laminate Flooring', 'Solid Wood Doors'];
+    })(),
     coverage: 'Klang Valley, Penang, Johor'
   };
 
@@ -82,8 +91,56 @@ export default function ProfileDetail() {
   };
 
   const handleSendMessage = () => {
-    navigate('/messages', { state: { recipient: data.name } });
+    setInquiryProduct('');
+    setInquirySent(false);
+    setInquiryModalOpen(true);
   };
+
+  const submitInquiry = () => {
+    const saved = localStorage.getItem('buildlink_inquiries');
+    const inquiries = saved ? JSON.parse(saved) : [
+      { id: 1, from: 'KL Design & Build', product: 'Premium Teak Wood', date: 'Today', status: 'New' },
+      { id: 2, from: 'Homeowner JD', product: 'Solid Wood Doors', date: 'Yesterday', status: 'Replied' },
+      { id: 3, from: 'Solid Fix Co.', product: 'Oak Laminate Flooring', date: '3 days ago', status: 'Closed' },
+    ];
+    // Get the logged-in contractor name from localStorage
+    const contractorRaw = localStorage.getItem('buildlink_contractor_data');
+    const contractorData = contractorRaw ? JSON.parse(contractorRaw) : null;
+    const senderName = contractorData?.companyName || contractorData?.name || 'Anonymous Contractor';
+    const senderLocation = contractorData?.location || 'Malaysia';
+    const senderServices = contractorData?.services || [];
+    const inquiryId = Date.now();
+
+    inquiries.unshift({
+      id: inquiryId,
+      from: senderName,
+      product: inquiryProduct || 'General Inquiry',
+      date: 'Just now',
+      status: 'New'
+    });
+    localStorage.setItem('buildlink_inquiries', JSON.stringify(inquiries));
+
+    // Also save as a contractor lead so it appears in supplier's AI Suggestions
+    const leadsRaw = localStorage.getItem('buildlink_contractor_leads');
+    const leads = leadsRaw ? JSON.parse(leadsRaw) : [];
+    // Avoid duplicates by same sender+product
+    const alreadyExists = leads.some((l: any) => l.name === senderName && l.product === inquiryProduct);
+    if (!alreadyExists) {
+      leads.unshift({
+        id: inquiryId,
+        name: senderName,
+        location: senderLocation,
+        tags: senderServices.length > 0 ? senderServices : ['General Contracting'],
+        product: inquiryProduct,
+        date: 'Just now',
+        isInquiry: true,
+      });
+      localStorage.setItem('buildlink_contractor_leads', JSON.stringify(leads));
+    }
+
+    setInquirySent(true);
+  };
+
 
   const fadeInUp = {
     initial: { opacity: 0, y: 20 },
@@ -342,6 +399,82 @@ export default function ProfileDetail() {
       </main>
 
       <Footer />
+
+      {/* Inquiry Modal */}
+      <AnimatePresence>
+        {inquiryModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-[#E4E2DC]"
+            >
+              {inquirySent ? (
+                <>
+                  <div className="flex flex-col items-center text-center py-6">
+                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                      <CheckCircle2 size={32} className="text-green-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-[#111] mb-2">Inquiry Sent!</h3>
+                    <p className="text-text-muted text-sm mb-6">Your inquiry for <span className="font-bold text-[#111]">{inquiryProduct}</span> has been sent to the supplier. They will review and respond shortly.</p>
+                    <Button className="w-full rounded-xl h-11 font-bold" onClick={() => setInquiryModalOpen(false)}>
+                      Done
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-5">
+                    <h3 className="text-xl font-bold text-[#111]">Send Inquiry</h3>
+                    <button onClick={() => setInquiryModalOpen(false)} className="text-[#888880] hover:text-[#111]">
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-bold text-[#111] mb-1">Which product are you inquiring about?</label>
+                      <select
+                        value={inquiryProduct}
+                        onChange={(e) => setInquiryProduct(e.target.value)}
+                        className="w-full h-11 px-3 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A]"
+                      >
+                        <option value="" disabled>Select a product to inquire...</option>
+                        {(data as any).products?.map((p: string) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <Button
+                      className="flex-1 rounded-xl h-11 font-bold"
+                      onClick={submitInquiry}
+                      disabled={!inquiryProduct}
+                    >
+                      Send Inquiry
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="flex-1 rounded-xl h-11 font-bold border border-border"
+                      onClick={() => setInquiryModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -26,6 +26,12 @@ export default function Navbar() {
     ? '/dashboard/contractor'
     : '/dashboard/supplier';
 
+  const profilePath = isHomeowner 
+    ? '/dashboard/homeowner' 
+    : isContractor 
+    ? '/profile/contractor/me' 
+    : '/profile/supplier/me';
+
   const refreshUnread = () => setUnread(getUnreadCount());
 
   useEffect(() => {
@@ -124,7 +130,7 @@ export default function Navbar() {
               </div>
 
               <div className="flex items-center gap-4 pl-6 border-l border-border">
-                <Link to={dashboardPath} className="flex items-center gap-3 group">
+                <Link to={profilePath} className="flex items-center gap-3 group">
                   <span className="text-sm font-black uppercase tracking-widest text-[#111] group-hover:text-[#E8642A] transition-colors">My Account</span>
                   <div className="w-10 h-10 rounded-full bg-[#E8642A] text-white flex items-center justify-center font-bold text-sm shadow-sm group-hover:scale-105 transition-transform">
                     <User size={20} />

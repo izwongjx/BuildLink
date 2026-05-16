@@ -20,12 +20,12 @@ export const DEMO_HOMEOWNER_PROJECTS = [
 
 export const getContractors = () => {
   const saved = localStorage.getItem('buildlink_contractors');
-  return saved ? JSON.parse(saved) : INITIAL_CONTRACTORS;
+  return saved ? JSON.parse(saved) : DEMO_CONTRACTORS;
 };
 
 export const getSuppliers = () => {
   const saved = localStorage.getItem('buildlink_suppliers');
-  return saved ? JSON.parse(saved) : INITIAL_SUPPLIERS;
+  return saved ? JSON.parse(saved) : DEMO_SUPPLIERS;
 };
 
 export const getHomeownerProjects = () => {
