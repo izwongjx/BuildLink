@@ -3,30 +3,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Briefcase, TrendingUp, Sparkles, ArrowRight, Clock, MapPin,
-  Inbox, Check, X, ChevronDown, Loader2, ExternalLink
+  Inbox, Check, X, ChevronDown, Loader2, ExternalLink, Send
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { getHomeownerProjects, getSuppliers } from '../../lib/db';
 import { getProjects, getProject, updateProject, addNotification } from '../../lib/projects';
 import Navbar from '../../components/layout/Navbar';
+import {
+  scoreHomeownerForContractor, scoreSupplierForContractor,
+  sortByScore, matchBadgeStyle
+} from '../../lib/matchingEngine';
+import {
+  getInvitations, addInvitation, getInvitationsForContractor,
+  Invitation as LibInvitation
+} from '../../lib/invitations';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Invitation {
-  id: string;
-  projectId: string;
-  projectName: string;
-  homeownerLocation: string;
-  projectType: string;
-  budget: string;
-  scopesCovered: string[];
-  status: 'pending' | 'accepted' | 'declined';
-  description: string;
-}
-
-// ─── Invitation Card ──────────────────────────────────────────────────────────
-function InvitationCard({ inv, onAccept, onDecline }: {
-  inv: Invitation;
+// ─── Project Invitation (From Homeowner) Card ─────────────────────────────────
+function ProjectInvitationCard({ inv, onAccept, onDecline }: {
+  inv: any;
   onAccept: (id: string) => void;
   onDecline: (id: string, reason: string) => void;
 }) {
@@ -56,7 +51,7 @@ function InvitationCard({ inv, onAccept, onDecline }: {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16, scale: 0.97 }}
-      className="bg-white border border-[#E4E2DC] rounded-2xl overflow-hidden"
+      className="bg-white border border-[#E4E2DC] rounded-2xl overflow-hidden shadow-sm"
       style={{ borderLeft: '4px solid #2B5CE6', borderRadius: '14px' }}
     >
       <div className="p-6">
@@ -94,7 +89,7 @@ function InvitationCard({ inv, onAccept, onDecline }: {
         <div className="mb-4">
           <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#888880] mb-2">Your scope</p>
           <div className="flex flex-wrap gap-1.5">
-            {inv.scopesCovered.map(s => (
+            {inv.scopesCovered.map((s: string) => (
               <span key={s} className="px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#EBF0FD] text-[#2B5CE6]">
                 {s}
               </span>
@@ -146,17 +141,13 @@ function InvitationCard({ inv, onAccept, onDecline }: {
         )}
 
         {inv.status === 'accepted' && (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-2 px-5 h-10 border border-[#2B5CE6] text-[#2B5CE6] rounded-xl font-bold text-[13px] hover:bg-[#EBF0FD] transition-colors"
-          >
-            <ExternalLink size={14} /> Open Project Room
-          </motion.button>
+          <div className="text-[12px] font-bold text-green-700 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-500" /> Wires into Homeowner Project space
+          </div>
         )}
       </div>
 
-      {/* Decline Modal (inline slide-up) */}
+      {/* Decline Modal */}
       <AnimatePresence>
         {showDeclineModal && (
           <motion.div
@@ -206,37 +197,73 @@ function InvitationCard({ inv, onAccept, onDecline }: {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main Contractor Dashboard ───────────────────────────────────────────────
 export default function ContractorDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'ai' | 'jobs' | 'invitations'>('ai');
   const [subTab, setSubTab] = useState<'homeowners' | 'suppliers'>('homeowners');
   const [projects, setProjects] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  
+  // Custom toast notification states
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Tracking invited/sent states for suggestions to show "Invited ✓" / "Sent ✓"
+  const [invitedIds, setInvitedIds] = useState<Record<string, boolean>>({});
 
   const isOnboarded = !!localStorage.getItem('buildlink_onboarded_contractor');
+  
   const contractorData = useMemo(() => {
     const data = localStorage.getItem('buildlink_contractor_data');
-    return data ? JSON.parse(data) : { tags: ['Plumbing', 'Electrical'] };
+    return data ? JSON.parse(data) : { id: 'contractor-1', name: 'Apex Renovations', tags: ['Plumbing', 'Electrical'] };
   }, []);
 
-  const contractorId = useMemo(() => {
-    const data = localStorage.getItem('buildlink_contractor_data');
-    return data ? JSON.parse(data).id || 'contractor-1' : 'contractor-1';
-  }, []);
+  const contractorId = contractorData.id || 'contractor-1';
+
+  // Read current dynamic invitations
+  const [systemInvitations, setSystemInvitations] = useState<LibInvitation[]>([]);
+
+  const loadData = () => {
+    setProjects(getHomeownerProjects());
+    setSuppliers(getSuppliers());
+    setSystemInvitations(getInvitations());
+  };
 
   useEffect(() => {
     if (!isOnboarded) navigate('/onboarding/contractor');
-    setProjects(getHomeownerProjects());
-    setSuppliers(getSuppliers());
+    loadData();
+  }, [isOnboarded, navigate]);
 
-    // Build invitations from any projects that have this contractor in their team
+  // Toast auto-fade helper
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // 1. Leads for You (Homeowner Projects matched to Contractor)
+  const scoredHomeowners = useMemo(() => {
+    const scored = projects.map(p => {
+      const { score, matchedOn } = scoreHomeownerForContractor(p, contractorData);
+      return { ...p, score, matchedOn };
+    });
+    return sortByScore(scored);
+  }, [projects, contractorData]);
+
+  // 2. Material Suppliers matched to Contractor services
+  const scoredSuppliers = useMemo(() => {
+    const scored = suppliers.map(s => {
+      const { score, matchedOn } = scoreSupplierForContractor(s, contractorData);
+      return { ...s, score, matchedOn };
+    });
+    return sortByScore(scored);
+  }, [suppliers, contractorData]);
+
+  // 3. Project invitations sent to this contractor from project team lists
+  const projectInvitesFromTeams = useMemo(() => {
     const allProjects = getProjects();
-    const myInvites: Invitation[] = [];
+    const myInvites: any[] = [];
     allProjects.forEach(p => {
       p.team.forEach(m => {
-        if (m.type === 'contractor' && m.status !== 'declined') {
+        if (m.type === 'contractor' && String(m.profileId) === String(contractorId) && m.status !== 'declined') {
           myInvites.push({
             id: `${p.id}-${m.profileId}`,
             projectId: p.id,
@@ -245,85 +272,131 @@ export default function ContractorDashboard() {
             projectType: p.type,
             budget: p.budget,
             scopesCovered: m.scopesCovered,
-            status: m.status === 'accepted' ? 'accepted' : m.status === 'declined' ? 'declined' : 'pending',
+            status: m.status === 'accepted' ? 'accepted' : 'pending',
             description: p.description,
           });
         }
       });
     });
-    setInvitations(myInvites);
-  }, [isOnboarded, navigate]);
+    return myInvites;
+  }, [contractorId]);
 
-  const filteredHomeowners = useMemo(() => {
-    return projects.map(p => {
-      const services = contractorData.tags || contractorData.services || [];
-      const matchCount = p.servicesNeeded?.filter((s: string) =>
-        services.some((cs: string) => cs.toLowerCase().includes(s.toLowerCase()))
-      ).length || 0;
-      const score = p.servicesNeeded?.length ? Math.round((matchCount / p.servicesNeeded.length) * 100) : 0;
-      return { ...p, score };
-    }).filter(p => p.score > 0).sort((a, b) => b.score - a.score);
-  }, [projects, contractorData]);
+  // Handle invitation to supplier from contractor
+  const handleInviteSupplier = (supplier: any, matchedTags: string[]) => {
+    addInvitation({
+      fromType: 'contractor',
+      fromId: String(contractorId),
+      fromName: contractorData.name || contractorData.businessName || 'Apex Renovations',
+      toHomeownerId: null,
+      toSupplierId: String(supplier.id),
+      toContractorId: null,
+      projectId: null,
+      scopesOffered: null,
+      materialsOffered: null,
+      materialsNeeded: matchedTags,
+      message: `Hi ${supplier.name}, we are looking for materials for our upcoming contracting projects.`,
+    });
+    setInvitedIds(prev => ({ ...prev, [supplier.id]: true }));
+    triggerToast(`Sent inquiry to ${supplier.name} successfully!`);
+    loadData();
+  };
 
-  const handleAccept = (invId: string) => {
-    setInvitations(prev => prev.map(i => i.id === invId ? { ...i, status: 'accepted' } : i));
-    const inv = invitations.find(i => i.id === invId);
-    if (inv) {
-      const p = getProject(inv.projectId);
+  // Handle project application from contractor
+  const handleApplyToProject = (project: any, matchedTags: string[]) => {
+    addInvitation({
+      fromType: 'contractor',
+      fromId: String(contractorId),
+      fromName: contractorData.name || contractorData.businessName || 'Apex Renovations',
+      toHomeownerId: 'demo-homeowner',
+      toSupplierId: null,
+      toContractorId: null,
+      projectId: String(project.id),
+      scopesOffered: matchedTags,
+      materialsOffered: null,
+      materialsNeeded: null,
+      message: `Hi ${project.name} team, we'd love to assist with the ${matchedTags.join(', ')} scopes of your project!`,
+    });
+    setInvitedIds(prev => ({ ...prev, [project.id]: true }));
+    triggerToast(`Quotation interest sent to ${project.name}!`);
+    loadData();
+  };
+
+  // Response handlers for project invites
+  const handleAcceptProjectInvite = (invId: string) => {
+    const target = projectInvitesFromTeams.find(i => i.id === invId);
+    if (target) {
+      const p = getProject(target.projectId);
       if (p) {
-        p.team = p.team.map(m => 
-          `${p.id}-${m.profileId}` === invId ? { ...m, status: 'accepted', respondedAt: Date.now() } : m
+        p.team = p.team.map(m =>
+          String(m.profileId) === String(contractorId) ? { ...m, status: 'accepted', respondedAt: Date.now() } : m
         );
         updateProject(p);
       }
       addNotification({
-        projectId: inv.projectId,
-        projectName: inv.projectName,
+        projectId: target.projectId,
+        projectName: target.projectName,
         type: 'accepted',
-        fromName: contractorData.businessName || 'Contractor',
+        fromName: contractorData.name || contractorData.businessName || 'Contractor',
         fromType: 'contractor',
-        scope: inv.scopesCovered[0] || null,
+        scope: target.scopesCovered[0] || null,
         declinedScope: null,
       });
       window.dispatchEvent(new Event('buildlink_notif_update'));
+      triggerToast('Accepted project invitation!');
+      loadData();
     }
   };
 
-  const handleDecline = (invId: string, reason: string) => {
-    setInvitations(prev => prev.filter(i => i.id !== invId));
-    const inv = invitations.find(i => i.id === invId);
-    if (inv) {
-      const p = getProject(inv.projectId);
+  const handleDeclineProjectInvite = (invId: string, reason: string) => {
+    const target = projectInvitesFromTeams.find(i => i.id === invId);
+    if (target) {
+      const p = getProject(target.projectId);
       if (p) {
-        p.team = p.team.map(m => 
-          `${p.id}-${m.profileId}` === invId ? { ...m, status: 'declined', respondedAt: Date.now() } : m
+        p.team = p.team.map(m =>
+          String(m.profileId) === String(contractorId) ? { ...m, status: 'declined', respondedAt: Date.now() } : m
         );
         updateProject(p);
       }
       addNotification({
-        projectId: inv.projectId,
-        projectName: inv.projectName,
+        projectId: target.projectId,
+        projectName: target.projectName,
         type: 'declined',
-        fromName: contractorData.businessName || 'Contractor',
+        fromName: contractorData.name || contractorData.businessName || 'Contractor',
         fromType: 'contractor',
-        scope: inv.scopesCovered[0] || null,
-        declinedScope: inv.scopesCovered[0] || null,
+        scope: target.scopesCovered[0] || null,
+        declinedScope: target.scopesCovered[0] || null,
       });
       window.dispatchEvent(new Event('buildlink_notif_update'));
+      triggerToast(`Declined invitation. Reason: ${reason}`);
+      loadData();
     }
   };
 
-  const pendingCount = invitations.filter(i => i.status === 'pending').length;
+  const pendingCount = projectInvitesFromTeams.filter(i => i.status === 'pending').length;
 
   const containerVars = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.08 } } };
   const itemVars = { hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
   return (
-    <div className="min-h-screen bg-background font-sans">
+    <div className="min-h-screen bg-background font-sans relative">
       <Navbar />
 
-      <div className="pt-32 pb-12 max-w-[1400px] mx-auto px-6 flex flex-col lg:flex-row gap-12">
+      {/* Global Notification Toast */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 bg-[#111] text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 font-semibold text-[13px] border border-white/10"
+          >
+            <span className="w-2 h-2 rounded-full bg-[#E8642A] animate-pulse" />
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      <div className="pt-32 pb-12 max-w-[1400px] mx-auto px-6 flex flex-col lg:flex-row gap-12">
         <main className="flex-1 min-w-0">
           {/* Tab bar */}
           <div className="flex gap-8 border-b border-border mb-10 overflow-x-auto no-scrollbar">
@@ -383,52 +456,147 @@ export default function ContractorDashboard() {
                     <AnimatePresence mode="wait">
                       <motion.div key={subTab} variants={containerVars} initial="hidden" animate="visible" className="grid gap-5">
                         {subTab === 'homeowners' ? (
-                          filteredHomeowners.length > 0 ? filteredHomeowners.map(p => (
-                            <motion.div variants={itemVars} key={p.id}>
-                              <Card className="p-7 flex flex-col md:flex-row md:items-center justify-between gap-6 border-none shadow-lg rounded-[24px] bg-white">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-4 mb-3">
-                                    <div className="w-12 h-12 rounded-full bg-[#E8642A] text-white flex items-center justify-center font-black text-lg">{p.name.charAt(0)}</div>
-                                    <div>
-                                      <h3 className="font-black text-xl text-[#111]">{p.name}</h3>
-                                      <p className="text-sm text-text-muted flex items-center gap-1"><MapPin size={13} /> {p.location}</p>
+                          scoredHomeowners.length > 0 ? (
+                            scoredHomeowners.map(p => {
+                              const badge = matchBadgeStyle(p.score);
+                              const hasInvited = invitedIds[p.id];
+                              const isZero = p.score === 0;
+
+                              return (
+                                <motion.div
+                                  variants={itemVars}
+                                  key={p.id}
+                                  className="transition-all"
+                                  style={{ opacity: isZero ? 0.65 : 1 }}
+                                >
+                                  <Card className="p-7 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-[#E4E2DC] rounded-[24px] bg-white shadow-sm hover:border-[#E8642A] transition-all">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-4 mb-3">
+                                        <div className="w-12 h-12 rounded-full bg-[#EBF0FD] text-[#2B5CE6] flex items-center justify-center font-black text-lg">
+                                          {p.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                          <h3 className="font-black text-xl text-[#111]">{p.name}</h3>
+                                          <p className="text-sm text-text-muted flex items-center gap-1"><MapPin size={13} /> {p.location}</p>
+                                        </div>
+                                        <div
+                                          className="ml-auto px-4 py-1.5 rounded-full font-black text-sm"
+                                          style={{ background: badge.bg, color: badge.text }}
+                                        >
+                                          {badge.label}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex flex-wrap gap-2 mb-3">
+                                        {p.servicesNeeded?.map((s: string) => {
+                                          const matched = (p.matchedOn || []).includes(s);
+                                          return (
+                                            <span
+                                              key={s}
+                                              className="px-3 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all"
+                                              style={matched ? { background: '#EBF0FD', color: '#2B5CE6', border: '1px solid #2B5CE6' } : { background: '#F7F6F3', color: '#888880', border: '1px solid #E4E2DC' }}
+                                            >
+                                              {s}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="flex items-center gap-5 text-sm text-text-muted font-semibold">
+                                        <span className="flex items-center gap-1.5"><Clock size={14} /> {p.timeline}</span>
+                                        <span>Budget: {p.budget}</span>
+                                      </div>
                                     </div>
-                                    <div className="ml-auto px-4 py-1.5 bg-[#FDF3EE] text-[#E8642A] rounded-full font-black text-sm">{p.score}% Match</div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 mb-3">
-                                    {p.servicesNeeded?.map((s: string) => (
-                                      <span key={s} className="px-3 py-1 bg-[#F7F6F3] border border-[#E4E2DC] rounded-lg text-[11px] font-bold text-[#111] uppercase tracking-wider">{s}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-5 text-sm text-text-muted font-semibold">
-                                    <span className="flex items-center gap-1.5"><Clock size={14} /> {p.timeline}</span>
-                                    <span>Budget: {p.budget}</span>
-                                  </div>
-                                </div>
-                                <Button className="h-11 px-7 rounded-xl font-black shrink-0">Quote Now</Button>
-                              </Card>
-                            </motion.div>
-                          )) : (
+
+                                    <Button
+                                      onClick={() => handleApplyToProject(p, p.matchedOn || [])}
+                                      disabled={hasInvited}
+                                      className="h-11 px-7 rounded-xl font-black shrink-0 transition-all"
+                                      style={hasInvited ? { background: '#E8F5EC', color: '#1A7A4A' } : { background: '#E8642A', color: '#FFF' }}
+                                    >
+                                      {hasInvited ? 'Sent ✓' : 'Send Quote Interest'}
+                                    </Button>
+                                  </Card>
+                                </motion.div>
+                              );
+                            })
+                          ) : (
                             <div className="py-20 text-center border-2 border-dashed border-border rounded-[24px]">
                               <p className="text-text-muted font-bold">No homeowners currently seeking your specific services.</p>
-                              <p className="text-sm text-text-muted mt-2">Your services: {(contractorData.tags || contractorData.services || []).join(', ')}</p>
                             </div>
                           )
                         ) : (
-                          suppliers.length > 0 ? suppliers.map(s => (
-                            <motion.div variants={itemVars} key={s.id}>
-                              <Card className="p-5 flex items-center justify-between border-[#E4E2DC] hover:border-[#E8642A] transition-all rounded-[20px] bg-white shadow-sm">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-11 h-11 rounded-xl bg-[#F7F6F3] border border-[#E4E2DC] flex items-center justify-center font-black text-lg text-[#111]">{s.name.charAt(0)}</div>
-                                  <div>
-                                    <h3 className="font-bold text-[16px] text-[#111]">{s.name}</h3>
-                                    <p className="text-xs text-text-muted font-semibold">{s.location}</p>
-                                  </div>
-                                </div>
-                                <Button variant="ghost" className="font-bold" onClick={() => navigate(`/profile/supplier/${s.id}`)}>View Products</Button>
-                              </Card>
-                            </motion.div>
-                          )) : (
+                          scoredSuppliers.length > 0 ? (
+                            scoredSuppliers.map(s => {
+                              const badge = matchBadgeStyle(s.score);
+                              const hasInvited = invitedIds[s.id];
+                              const isZero = s.score === 0;
+
+                              return (
+                                <motion.div
+                                  variants={itemVars}
+                                  key={s.id}
+                                  className="transition-all"
+                                  style={{ opacity: isZero ? 0.65 : 1 }}
+                                >
+                                  <Card className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-[#E4E2DC] hover:border-[#E8642A] transition-all rounded-[20px] bg-white shadow-sm">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-4 mb-3">
+                                        <div className="w-11 h-11 rounded-xl bg-[#E8F5EC] border border-[#E4E2DC] flex items-center justify-center font-black text-lg text-[#1A7A4A]">
+                                          {s.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                          <h3 className="font-bold text-[17px] text-[#111]">{s.name}</h3>
+                                          <p className="text-xs text-text-muted font-semibold flex items-center gap-1">
+                                            <MapPin size={10} /> {s.location}
+                                          </p>
+                                        </div>
+                                        <div
+                                          className="ml-auto px-3 py-1 rounded-full font-black text-xs"
+                                          style={{ background: badge.bg, color: badge.text }}
+                                        >
+                                          {badge.label}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex flex-wrap gap-2 mb-3">
+                                        {s.tags?.map((t: string) => {
+                                          const matched = (s.matchedOn || []).includes(t);
+                                          return (
+                                            <span
+                                              key={t}
+                                              className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                                              style={matched ? { background: '#E8F5EC', color: '#1A7A4A' } : { background: '#F7F6F3', color: '#888880' }}
+                                            >
+                                              {t}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 shrink-0">
+                                      <Button
+                                        variant="ghost"
+                                        className="font-bold border border-[#E4E2DC] hover:bg-[#F7F6F3]"
+                                        onClick={() => navigate(`/profile/supplier/${s.id}`)}
+                                      >
+                                        View Products
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleInviteSupplier(s, s.matchedOn || [])}
+                                        disabled={hasInvited}
+                                        className="h-9 px-4 rounded-xl font-bold flex items-center gap-1.5 transition-all text-xs"
+                                        style={hasInvited ? { background: '#E8F5EC', color: '#1A7A4A' } : { background: '#111', color: '#FFF' }}
+                                      >
+                                        {hasInvited ? <><Check size={12} /> Invited</> : <><Send size={12} /> Send Inquiry</>}
+                                      </Button>
+                                    </div>
+                                  </Card>
+                                </motion.div>
+                              );
+                            })
+                          ) : (
                             <div className="py-16 text-center border-2 border-dashed border-border rounded-[24px]">
                               <p className="text-text-muted">No suppliers registered yet.</p>
                             </div>
@@ -441,7 +609,7 @@ export default function ContractorDashboard() {
               </motion.div>
             )}
 
-            {/* Marketplace tab (kept simple) */}
+            {/* Marketplace tab */}
             {activeTab === 'jobs' && (
               <motion.div key="jobs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <div className="py-20 text-center border-2 border-dashed border-[#E4E2DC] rounded-[24px]">
@@ -455,7 +623,7 @@ export default function ContractorDashboard() {
             {/* Invitations tab */}
             {activeTab === 'invitations' && (
               <motion.div key="invitations" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                {invitations.length === 0 ? (
+                {projectInvitesFromTeams.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-[#E4E2DC] rounded-[24px]">
                     <Inbox size={40} className="text-[#D4D2CC] mb-4" />
                     <h3 className="text-[18px] font-bold text-[#888880] mb-2">No invitations yet</h3>
@@ -464,16 +632,21 @@ export default function ContractorDashboard() {
                 ) : (
                   <div className="space-y-4">
                     <p className="text-[12px] font-bold uppercase tracking-[0.15em] text-[#888880] mb-2">
-                      {pendingCount} pending · {invitations.length - pendingCount} responded
+                      {pendingCount} pending · {projectInvitesFromTeams.length - pendingCount} responded
                     </p>
                     <AnimatePresence>
-                      {invitations.map((inv, i) => (
+                      {projectInvitesFromTeams.map((inv, i) => (
                         <motion.div
                           key={inv.id}
                           initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0, transition: { delay: i * 0.06 } }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.06 }}
                         >
-                          <InvitationCard inv={inv} onAccept={handleAccept} onDecline={handleDecline} />
+                          <ProjectInvitationCard
+                            inv={inv}
+                            onAccept={handleAcceptProjectInvite}
+                            onDecline={handleDeclineProjectInvite}
+                          />
                         </motion.div>
                       ))}
                     </AnimatePresence>
@@ -486,20 +659,20 @@ export default function ContractorDashboard() {
 
         {/* Sidebar */}
         <aside className="w-full lg:w-[300px] shrink-0 flex flex-col gap-5">
-          <Card className="p-6">
+          <Card className="p-6 border border-[#E4E2DC] rounded-2xl bg-white">
             <h3 className="font-bold text-[15px] text-[#111] mb-4">Profile Completeness</h3>
             <div className="relative w-20 h-20 mx-auto mb-4">
               <svg className="w-full h-full -rotate-90">
                 <circle cx="40" cy="40" r="34" stroke="#F0EFEB" strokeWidth="6" fill="transparent" />
-                <circle cx="40" cy="40" r="34" stroke="#E8642A" strokeWidth="6" fill="transparent" strokeDasharray="213" strokeDashoffset="43" className="transition-all duration-1000" />
+                <circle cx="40" cy="40" r="34" stroke="#2B5CE6" strokeWidth="6" fill="transparent" strokeDasharray="213" strokeDashoffset="43" className="transition-all duration-1000" />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center font-black text-[18px] text-[#111]">80%</div>
             </div>
             <p className="text-[12px] text-center text-text-muted mb-3">Add your license number to reach 100%.</p>
-            <Button variant="ghost" className="w-full" size="sm">Complete Profile</Button>
+            <Button variant="ghost" className="w-full font-bold border border-[#E4E2DC]" size="sm">Complete Profile</Button>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 border border-[#E4E2DC] rounded-2xl bg-white">
             <h3 className="font-bold text-[15px] text-[#111] mb-4">Quick Stats</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
@@ -512,7 +685,7 @@ export default function ContractorDashboard() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2 text-[13px] text-text-muted"><Inbox size={15} /> Pending Invites</span>
-                <span className="font-bold text-[#E8642A]">{pendingCount}</span>
+                <span className="font-bold text-[#2B5CE6]">{pendingCount}</span>
               </div>
             </div>
           </Card>

@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Star, Award, Phone, Mail, MessageCircle, Bookmark, ShieldCheck, Clock, CheckCircle2, Eye, ArrowLeft, Share2, MoreHorizontal, X } from 'lucide-react';
+import { MapPin, Star, Award, Package, MessageCircle, Bookmark, ShieldCheck, Clock, CheckCircle2, ArrowLeft, Share2, Tag, SendHorizonal, X, Truck } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import { Button } from '../components/ui/Button';
@@ -17,6 +17,7 @@ export default function ProfileDetail() {
   const [activeGalleryTab, setActiveGalleryTab] = useState(0);
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [inquiryProduct, setInquiryProduct] = useState('');
+  const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
 
   // Fetch real data from db (localStorage + initial)
@@ -34,57 +35,78 @@ export default function ProfileDetail() {
     window.scrollTo(0, 0);
   }, [id, type]);
 
-  // Fallback to mock if not found in db
+  // ── Safe data merge ─────────────────────────────────────────────────────────
+  // `provider` may come from demo data or onboarding data. Both can be missing
+  // fields like avail/match/reviews/certs/gallery. We spread over a full set of
+  // typed defaults so rendering never crashes on undefined.property access.
   const isContractor = type === 'contractor';
-  const data = provider || (isContractor ? {
-    name: 'Apex Renovations',
+
+  const contractorDefaults = {
+    name: 'New Contractor',
     role: 'Contractor',
-    location: 'Kuala Lumpur',
-    match: 94,
-    rating: 4.8,
-    reviews: 42,
-    projects: 124,
-    years: 12,
-    price: 'Premium',
+    location: 'Malaysia',
+    match: 90,
+    rating: 5.0,
+    reviews: 0,
+    projects: 0,
+    years: 1,
+    price: 'Mid-Range',
     avail: 'Available Now',
-    about: "Apex Renovations specializes in high-end residential and commercial fit-outs. With over a decade of experience, we pride ourselves on meticulous attention to detail, transparent pricing, and delivering projects on time. We handle everything from design consultation to final handover.",
-    tags: ['General Contracting', 'Interior Fit-Out', 'Carpentry', 'Smart Home Integration', 'Plumbing', 'Electrical'],
-    certs: ['CIDB Registered', 'ISO Certified', 'Insured'],
+    about: 'Expert contractor dedicated to high-quality craftsmanship and reliable service.',
+    tags: [] as string[],
+    certs: ['Verified Builder'],
     gallery: [
       { id: 1, title: 'Modern Kitchen', url: 'https://images.unsplash.com/photo-1556910103-1c02745a872f?auto=format&fit=crop&q=80&w=1000' },
       { id: 2, title: 'Luxury Bathroom', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=1000' },
-      { id: 3, title: 'Living Space', url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&q=80&w=1000' },
     ],
-    coverage: 'Kuala Lumpur, Selangor'
-  } : {
-    name: 'Lumber Co.',
+    coverage: 'Malaysia',
+    products: [] as string[],
+  };
+
+  const supplierDefaults = {
+    name: 'New Supplier',
     role: 'Supplier',
-    location: 'Selangor',
-    match: 92,
-    rating: 4.9,
-    reviews: 128,
-    projects: 500, // Deliveries
-    years: 20,
-    price: 'Wholesale',
+    location: 'Malaysia',
+    match: 90,
+    rating: 5.0,
+    reviews: 0,
+    projects: 0,
+    years: 1,
+    price: 'Mid-Range',
     avail: 'In Stock',
-    about: "Lumber Co. is a premier supplier of high-quality timber, engineered wood, and custom joinery materials. Sourcing sustainably, we provide contractors and builders with reliable, top-grade materials. Our logistics network ensures prompt delivery across the region.",
-    tags: ['Timber & Wood', 'Flooring', 'Doors & Windows', 'Plywood', 'MDF'],
-    certs: ['ISO Certified', 'SIRIM Approved', 'Sustainable Forestry'],
+    about: 'Leading supplier of premium building materials and hardware.',
+    tags: [] as string[],
+    certs: ['Quality Guaranteed'],
     gallery: [
-      { id: 1, title: 'Premium Oak', url: 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=1000' },
-      { id: 2, title: 'Engineered Pine', url: 'https://images.unsplash.com/photo-1616046229478-9901c5536a45?auto=format&fit=crop&q=80&w=1000' },
+      { id: 1, title: 'Premium Material', url: 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=1000' },
     ],
+    coverage: 'Malaysia',
     products: (() => {
       const saved = localStorage.getItem('buildlink_supplier_products');
       return saved
         ? JSON.parse(saved).map((p: any) => p.name)
         : ['Premium Teak Wood', 'Oak Laminate Flooring', 'Solid Wood Doors'];
     })(),
-    coverage: 'Klang Valley, Penang, Johor'
-  });
+  };
 
-  // Map "portfolio" to "gallery" for consistency if needed
-  const gallery = data.portfolio || data.gallery || [];
+  const defaults = isContractor ? contractorDefaults : supplierDefaults;
+
+  // Merge: defaults first, then real provider fields on top.
+  // For arrays (tags, certs, gallery/portfolio) only override if the source has a non-empty value.
+  const raw = provider || {};
+  const data: typeof defaults & Record<string, any> = {
+    ...defaults,
+    ...raw,
+    // Preserve arrays only when they actually contain items
+    tags:  (raw as any).tags?.length  ? (raw as any).tags  : defaults.tags,
+    certs: (raw as any).certs?.length ? (raw as any).certs : defaults.certs,
+  };
+
+  // Normalise gallery: onboarding saves as "portfolio", demo data as "gallery"
+  const gallery: { id: number; title: string; url: string }[] =
+    ((raw as any).portfolio?.length ? (raw as any).portfolio : null) ||
+    ((raw as any).gallery?.length   ? (raw as any).gallery   : null) ||
+    defaults.gallery;
 
   const handleBookmark = () => {
     const saved = localStorage.getItem('buildlink_saved_matches');
@@ -100,8 +122,9 @@ export default function ProfileDetail() {
     setIsBookmarked(!isBookmarked);
   };
 
-  const handleSendMessage = () => {
-    setInquiryProduct('');
+  const handleSendMessage = (preselect?: string) => {
+    setInquiryProduct(preselect || '');
+    setInquiryMessage('');
     setInquirySent(false);
     setInquiryModalOpen(true);
   };
@@ -125,6 +148,7 @@ export default function ProfileDetail() {
       id: inquiryId,
       from: senderName,
       product: inquiryProduct || 'General Inquiry',
+      message: inquiryMessage,
       date: 'Just now',
       status: 'New'
     });
@@ -291,20 +315,91 @@ export default function ProfileDetail() {
                 </div>
               </motion.section>
 
-              {/* Tabs / Details */}
-              <motion.section {...fadeInUp} className="space-y-16">
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted mb-6">Philosophy & Experience</h3>
-                  <p className="text-xl md:text-2xl font-medium text-[#444] leading-relaxed max-w-3xl italic">
-                    "{data.about}"
-                  </p>
-                </div>
+              {/* About */}
+              <motion.section {...fadeInUp} className="mb-12">
+                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted mb-4">
+                  {isContractor ? 'Philosophy & Experience' : 'About This Supplier'}
+                </h3>
+                <p className="text-xl md:text-2xl font-medium text-[#444] leading-relaxed max-w-3xl italic">
+                  "{data.about}"
+                </p>
+              </motion.section>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {/* ── SUPPLIER: Products Grid ──────────────────────────────── */}
+              {!isContractor && (
+                <motion.section {...fadeInUp} className="mb-12">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted">
+                      Products & Materials
+                    </h3>
+                    <span className="text-xs font-bold text-text-muted">
+                      {data.products?.length || 0} items available
+                    </span>
+                  </div>
+
+                  {data.products?.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {data.products.map((product: string, idx: number) => (
+                        <motion.div
+                          key={product}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0, transition: { delay: idx * 0.07 } }}
+                          className="group bg-white border border-[#E4E2DC] rounded-2xl p-5 hover:border-[#E8642A] hover:shadow-md transition-all"
+                        >
+                          {/* Icon + name */}
+                          <div className="flex items-start gap-4 mb-4">
+                            <div className="w-12 h-12 rounded-xl bg-[#FDF3EE] flex items-center justify-center shrink-0">
+                              <Package size={22} className="text-[#E8642A]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-black text-[15px] text-[#111] leading-tight mb-1 truncate">{product}</h4>
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                <span className="text-[11px] font-bold text-green-600">In Stock</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Tags from supplier categories */}
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {(data.tags as string[]).slice(0, 2).map((tag: string) => (
+                              <span key={tag} className="px-2 py-0.5 bg-[#F7F6F3] border border-[#E4E2DC] rounded text-[10px] font-bold text-[#555] uppercase tracking-wider">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* CTA */}
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => handleSendMessage(product)}
+                            className="w-full flex items-center justify-center gap-2 h-10 bg-[#111] text-white rounded-xl font-bold text-[13px] hover:bg-[#E8642A] transition-colors"
+                          >
+                            <SendHorizonal size={14} />
+                            Send Inquiry
+                          </motion.button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center border-2 border-dashed border-[#E4E2DC] rounded-2xl">
+                      <Package size={32} className="text-[#D4D2CC] mx-auto mb-3" />
+                      <p className="text-[#888880] font-bold">No products listed yet.</p>
+                    </div>
+                  )}
+                </motion.section>
+              )}
+
+              {/* Expertise & Credentials */}
+              <motion.section {...fadeInUp} className="space-y-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   <div>
-                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted mb-6">Expertise</h3>
+                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted mb-6">
+                      {isContractor ? 'Expertise' : 'Product Categories'}
+                    </h3>
                     <div className="flex flex-wrap gap-2">
-                      {data.tags.map(tag => (
+                      {data.tags.map((tag: string) => (
                         <span key={tag} className="px-5 py-2.5 bg-surface border border-border rounded-xl text-sm font-bold text-[#111] hover:border-accent transition-colors cursor-default">
                           {tag}
                         </span>
@@ -314,7 +409,7 @@ export default function ProfileDetail() {
                   <div>
                     <h3 className="text-xs font-black uppercase tracking-[0.3em] text-text-muted mb-6">Verified Credentials</h3>
                     <div className="space-y-3">
-                      {data.certs.map(cert => (
+                      {data.certs.map((cert: string) => (
                         <div key={cert} className="flex items-center gap-4 p-4 bg-surface border border-border rounded-xl">
                           <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
                             <ShieldCheck size={20} />
@@ -371,24 +466,58 @@ export default function ProfileDetail() {
                     </div>
 
                     <div className="space-y-6 pt-8 border-t border-border">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-muted">
-                          <Clock size={18} />
-                        </div>
-                        <div>
-                          <div className="text-sm font-black text-[#111]">Start Date</div>
-                          <div className="text-xs font-medium text-text-muted">Available from next month</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-muted">
-                          <Award size={18} />
-                        </div>
-                        <div>
-                          <div className="text-sm font-black text-[#111]">Verified Partner</div>
-                          <div className="text-xs font-medium text-text-muted">BuildLink Certified Professional</div>
-                        </div>
-                      </div>
+                      {isContractor ? (
+                        <>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-muted">
+                              <Clock size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-[#111]">Availability</div>
+                              <div className="text-xs font-medium text-text-muted">{data.avail}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-muted">
+                              <CheckCircle2 size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-[#111]">Verified Partner</div>
+                              <div className="text-xs font-medium text-text-muted">BuildLink Certified Professional</div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-[#FDF3EE] flex items-center justify-center text-[#E8642A]">
+                              <Truck size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-[#111]">Delivery</div>
+                              <div className="text-xs font-medium text-text-muted">Ships to {data.coverage || data.location}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-[#FDF3EE] flex items-center justify-center text-[#E8642A]">
+                              <Tag size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-[#111]">{data.products?.length || 0} Products Listed</div>
+                              <div className="text-xs font-medium text-text-muted">All items currently in stock</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-[#FDF3EE] flex items-center justify-center text-[#E8642A]">
+                              <CheckCircle2 size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-[#111]">Verified Supplier</div>
+                              <div className="text-xs font-medium text-text-muted">BuildLink Quality Partner</div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -453,7 +582,7 @@ export default function ProfileDetail() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-bold text-[#111] mb-1">Which product are you inquiring about?</label>
+                      <label className="block text-sm font-bold text-[#111] mb-1">Product</label>
                       <select
                         value={inquiryProduct}
                         onChange={(e) => setInquiryProduct(e.target.value)}
@@ -464,6 +593,16 @@ export default function ProfileDetail() {
                           <option key={p} value={p}>{p}</option>
                         ))}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#111] mb-1">Message <span className="font-normal text-text-muted">(optional)</span></label>
+                      <textarea
+                        value={inquiryMessage}
+                        onChange={(e) => setInquiryMessage(e.target.value)}
+                        rows={3}
+                        placeholder="e.g. We need approx. 200 sqft, delivery to Subang Jaya..."
+                        className="w-full px-3 py-2 rounded-xl border border-[#E4E2DC] bg-[#F7F6F3] text-[14px] focus:outline-none focus:border-[#E8642A] resize-none"
+                      />
                     </div>
                   </div>
 

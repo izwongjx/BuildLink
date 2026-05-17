@@ -26,11 +26,21 @@ export default function Navbar() {
     ? '/dashboard/contractor'
     : '/dashboard/supplier';
 
-  const profilePath = isHomeowner 
-    ? '/dashboard/homeowner' 
-    : isContractor 
-    ? '/profile/contractor/me' 
-    : '/profile/supplier/me';
+  // Resolve the real profile path using the saved onboarding ID
+  const profilePath = (() => {
+    if (isContractor) {
+      const raw = localStorage.getItem('buildlink_contractor_data');
+      const id = raw ? JSON.parse(raw).id : null;
+      return id ? `/profile/contractor/${id}` : '/dashboard/contractor';
+    }
+    if (isSupplier) {
+      const raw = localStorage.getItem('buildlink_supplier_data');
+      const id = raw ? JSON.parse(raw).id : null;
+      return id ? `/profile/supplier/${id}` : '/dashboard/supplier';
+    }
+    // Homeowner — no dedicated profile page, point to dashboard
+    return '/dashboard/homeowner';
+  })();
 
   const refreshUnread = () => setUnread(getUnreadCount());
 

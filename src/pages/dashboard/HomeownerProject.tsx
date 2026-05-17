@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapPin, Check, Users, Send, Plus, X, Star, ChevronRight } from 'lucide-react';
+import { MapPin, Check, Users, Send, Plus, X, Star, Inbox } from 'lucide-react';
 import Navbar from '../../components/layout/Navbar';
 import {
   getProjects, getProject, removeTeamMember, Project, ProjectStatus
@@ -9,6 +9,11 @@ import {
 import { getContractors, getSuppliers } from '../../lib/db';
 import AddToProjectModal from '../../components/projects/AddToProjectModal';
 import BriefModal from '../../components/projects/BriefModal';
+import {
+  scoreContractorForHomeowner, scoreSupplierForHomeowner,
+  sortByScore, matchBadgeStyle,
+} from '../../lib/matchingEngine';
+import { getInvitations } from '../../lib/invitations';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const ROLE_COLOR = { contractor: '#2B5CE6', supplier: '#1A7A4B' };
@@ -60,21 +65,19 @@ function MatchCard({ item, type, project, onAdd, featured }: {
   onAdd: (item: any, type: 'contractor' | 'supplier') => void; featured?: boolean;
 }) {
   const navigate = useNavigate();
-  const color = ROLE_COLOR[type];
+  const score = item.score ?? 0;
+  const isZero = score === 0;
+  const color = isZero ? '#D4D2CC' : ROLE_COLOR[type];
   const light = ROLE_LIGHT[type];
+  const badge = matchBadgeStyle(score);
   const initials = item.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
   const alreadyAdded = project.team.some(m => String(m.profileId) === String(item.id));
-  const isLowMatch = (item.score || 0) === 0;
-
-  const uncovered = project.scopeItems.filter(s => !s.covered).map(s => s.service.toLowerCase());
-  const matchingTags = item.tags?.filter((t: string) =>
-    uncovered.some(u => u.includes(t.toLowerCase()) || t.toLowerCase().includes(u))
-  ) || [];
+  const matchedOn: string[] = item.matchedOn || [];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isZero ? 0.65 : 1, y: 0 }}
       whileHover={{ y: -3, boxShadow: '0 12px 36px rgba(0,0,0,0.09)' }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       className="bg-white border border-[#E4E2DC] transition-all"
@@ -82,33 +85,31 @@ function MatchCard({ item, type, project, onAdd, featured }: {
     >
       <div className={`p-5 ${featured ? 'p-7' : ''}`}>
         <div className="flex items-start gap-3 mb-3">
-          <div className={`${featured ? 'w-14 h-14' : 'w-11 h-11'} rounded-full flex items-center justify-center font-bold text-white shrink-0`} style={{ background: color }}>
+          <div
+            className={`${featured ? 'w-14 h-14' : 'w-11 h-11'} rounded-full flex items-center justify-center font-bold text-white shrink-0`}
+            style={{ background: color }}
+          >
             {initials}
           </div>
           <div className="flex-1 min-w-0">
             <p className={`${featured ? 'text-[18px]' : 'text-[15px]'} font-bold text-[#111] truncate`}>{item.name}</p>
             <p className="text-[12px] text-[#888880] flex items-center gap-1 mt-0.5"><MapPin size={10} />{item.location}</p>
           </div>
-          {isLowMatch ? (
-            <span className="px-2.5 py-1 bg-[#F0EFEB] text-[#888880] text-[11px] font-semibold rounded-full shrink-0">Low Match</span>
-          ) : (
-            <motion.div
-              animate={item.score === 100 ? {
-                scale: [1, 1.1, 1],
-                transition: { delay: 0.5, duration: 0.4 }
-              } : {}}
-            >
-              <ScoreArc score={item.score || 0} color={color} />
-            </motion.div>
-          )}
+          <motion.span
+            className="px-2.5 py-1 text-[11px] font-bold rounded-full shrink-0"
+            style={{ background: badge.bg, color: badge.text }}
+            animate={score === 100 ? { scale: [1, 1.08, 1], transition: { delay: 0.3, duration: 0.6 } } : {}}
+          >
+            {badge.label}
+          </motion.span>
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-3">
           {item.tags?.map((t: string) => {
-            const isMatch = matchingTags.includes(t);
+            const isMatch = matchedOn.includes(t);
             return (
               <span key={t} className="px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                style={isMatch ? { background: light, color } : { background: '#F7F6F3', color: '#888880' }}>
+                style={isMatch ? { background: light, color: ROLE_COLOR[type] } : { background: '#F7F6F3', color: '#888880' }}>
                 {t}
               </span>
             );
@@ -120,12 +121,12 @@ function MatchCard({ item, type, project, onAdd, featured }: {
             <div key={i} className="w-2 h-2 rounded-full"
               style={{ background: i <= 2 ? color : '#E4E2DC' }} />
           ))}
-          <span className="text-[11px] text-[#888880] ml-1">Mid-Range</span>
+          <span className="text-[11px] text-[#888880] ml-1">{item.price || 'Mid-Range'}</span>
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[12px] font-semibold text-green-700">
-            <span className="w-2 h-2 rounded-full bg-green-500" /> Available Now
+            <span className="w-2 h-2 rounded-full bg-green-500" /> {item.avail || 'Available Now'}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -155,6 +156,7 @@ function MatchCard({ item, type, project, onAdd, featured }: {
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
+
 function Sidebar({ project, onProjectUpdated }: { project: Project; onProjectUpdated: (p: Project) => void }) {
   const [briefOpen, setBriefOpen] = useState(false);
   const covered = project.scopeItems.filter(s => s.covered).length;
@@ -301,7 +303,8 @@ export default function HomeownerProject() {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [contractors, setContractors] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [role, setRole] = useState<'contractors' | 'suppliers'>('contractors');
+  const [invitations, setInvitations] = useState<any[]>([]);
+  const [role, setRole] = useState<'contractors' | 'suppliers' | 'invitations'>('contractors');
   const [skelLoading, setSkelLoading] = useState(false);
   const [addModal, setAddModal] = useState<{ item: any; type: 'contractor' | 'supplier' } | null>(null);
   const prevRole = useRef(role);
@@ -317,6 +320,7 @@ export default function HomeownerProject() {
     setAllProjects(getProjects());
     setContractors(getContractors());
     setSuppliers(getSuppliers());
+    setInvitations(getInvitations());
     loadProject();
   }, [loadProject]);
 
@@ -324,25 +328,30 @@ export default function HomeownerProject() {
   useEffect(() => {
     if (prevRole.current !== role) {
       prevRole.current = role;
-      setSkelLoading(true);
-      setTimeout(() => setSkelLoading(false), 600);
+      if (role !== 'invitations') {
+        setSkelLoading(true);
+        setTimeout(() => setSkelLoading(false), 600);
+      }
     }
   }, [role]);
 
-  const score = useCallback((items: any[]) => {
-    if (!project) return items;
-    const uncovered = project.scopeItems.map(s => s.service.toLowerCase());
-    return items.map(item => {
-      if (uncovered.length === 0) return { ...item, score: 0 };
-      const m = item.tags?.filter((t: string) => uncovered.some(u => u.includes(t.toLowerCase()) || t.toLowerCase().includes(u))).length || 0;
-      return { ...item, score: Math.round((m / uncovered.length) * 100) };
-    }).sort((a, b) => b.score - a.score);
-  }, [project]);
-
-  const scoredList = useMemo(() =>
-    score(role === 'contractors' ? contractors : suppliers),
-    [role, contractors, suppliers, score]
-  );
+  // Real matchingEngine integration
+  const scoredList = useMemo(() => {
+    if (!project || role === 'invitations') return [];
+    if (role === 'contractors') {
+      const scored = contractors.map(c => {
+        const { score, matchedOn } = scoreContractorForHomeowner(c, project);
+        return { ...c, score, matchedOn };
+      });
+      return sortByScore(scored);
+    } else {
+      const scored = suppliers.map(s => {
+        const { score, matchedOn } = scoreSupplierForHomeowner(s, project);
+        return { ...s, score, matchedOn };
+      });
+      return sortByScore(scored);
+    }
+  }, [role, contractors, suppliers, project]);
 
   const best = scoredList[0];
   const rest = scoredList.slice(1);
@@ -377,12 +386,26 @@ export default function HomeownerProject() {
               <p className="text-[14px] text-[#888880]">Intelligently matched to cover your project scope.</p>
             </div>
             <div className="flex gap-2 shrink-0">
-              {(['contractors', 'suppliers'] as const).map(r => (
-                <motion.button key={r} onClick={() => setRole(r)}
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                  className="px-4 h-9 rounded-full text-[13px] font-bold capitalize transition-all"
-                  style={role === r ? { background: '#E8642A', color: 'white' } : { background: '#F7F6F3', color: '#888880' }}>
+              {(['contractors', 'suppliers', 'invitations'] as const).map(r => (
+                <motion.button
+                  key={r}
+                  onClick={() => setRole(r)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="px-4 h-9 rounded-full text-[13px] font-bold capitalize transition-all relative"
+                  style={role === r ? { background: '#E8642A', color: 'white' } : { background: '#F7F6F3', color: '#888880' }}
+                >
                   {r}
+                  {r === 'invitations' && invitations.length > 0 && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-[#E8642A] text-white text-[9px] font-black rounded-full flex items-center justify-center"
+                      style={role === r ? { background: 'white', color: '#E8642A' } : {}}
+                    >
+                      {invitations.length}
+                    </motion.span>
+                  )}
                 </motion.button>
               ))}
             </div>
@@ -390,43 +413,172 @@ export default function HomeownerProject() {
 
           {/* Cards */}
           <AnimatePresence mode="wait">
-            {skelLoading ? (
-              <motion.div key="skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {role === 'invitations' ? (
+              <motion.div
+                key="invitations"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.25 }}
+              >
+                {invitations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-[#E4E2DC] rounded-2xl">
+                    <Inbox size={36} className="text-[#D4D2CC] mb-4" />
+                    <h3 className="text-[18px] font-bold text-[#888880] mb-2">No invitations yet</h3>
+                    <p className="text-[14px] text-[#888880] max-w-xs">Contractors and suppliers will appear here when they reach reach out.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {invitations.map((inv: any, i: number) => {
+                      const borderColor = inv.fromType === 'contractor' ? '#2B5CE6' : '#1A7A4A';
+                      const bgLight = inv.fromType === 'contractor' ? '#EBF0FD' : '#E8F5EC';
+                      const tagColor = inv.fromType === 'contractor' ? '#2B5CE6' : '#1A7A4A';
+                      const tags = inv.scopesOffered || inv.materialsOffered || [];
+                      const sentAgo = inv.sentAt ? Math.round((Date.now() - inv.sentAt) / 60_000) : null;
+                      
+                      // Match score badge logic
+                      let matchScore = 0;
+                      if (inv.fromType === 'contractor') {
+                        const target = contractors.find(c => String(c.id) === String(inv.fromId));
+                        if (target) matchScore = scoreContractorForHomeowner(target, project).score;
+                      } else {
+                        const target = suppliers.find(s => String(s.id) === String(inv.fromId));
+                        if (target) matchScore = scoreSupplierForHomeowner(target, project).score;
+                      }
+                      const badge = matchBadgeStyle(matchScore);
+
+                      return (
+                        <motion.div
+                          key={inv.id}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.06 }}
+                          className="bg-white border border-[#E4E2DC] rounded-2xl overflow-hidden"
+                          style={{ borderLeft: `4px solid ${borderColor}`, borderRadius: 14 }}
+                        >
+                          <div className="p-5">
+                            {/* Top Row */}
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-10 h-10 rounded-full text-white text-[13px] font-bold flex items-center justify-center shrink-0"
+                                  style={{ background: borderColor }}
+                                >
+                                  {inv.fromName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-[15px] font-bold text-[#111]">{inv.fromName}</p>
+                                  <p className="text-[11px] text-[#888880] capitalize">{inv.fromType}</p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[11px] text-[#888880]">Invited you</span>
+                                {sentAgo !== null && (
+                                  <p className="text-[10px] text-[#888880]">
+                                    {sentAgo < 60 ? `${sentAgo}m ago` : `${Math.round(sentAgo / 60)}h ago`}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Middle Row */}
+                            {tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mb-3">
+                                <span className="text-[11px] font-semibold text-[#888880] self-center">Can provide:</span>
+                                {tags.map((t: string) => (
+                                  <span key={t} className="px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: bgLight, color: tagColor }}>
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {inv.message && <p className="text-[12px] text-[#555] italic mb-3">"{inv.message}"</p>}
+
+                            {/* Match rating */}
+                            <div className="flex items-center gap-2 mb-4">
+                              <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Match to project:</span>
+                              <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full" style={{ background: badge.bg, color: badge.text }}>
+                                {badge.label}
+                              </span>
+                            </div>
+
+                            {/* Bottom Row */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => navigate(`/profile/${inv.fromType}/${inv.fromId}`)}
+                                className="px-3 h-8 rounded-lg border border-[#E4E2DC] text-[12px] font-semibold text-[#555] hover:border-[#E8642A] transition-colors"
+                              >
+                                View Profile
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            ) : skelLoading ? (
+              <motion.div
+                key="skel"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="grid grid-cols-1 xl:grid-cols-2 gap-4"
+              >
                 {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
               </motion.div>
             ) : (
-              <motion.div key={role} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.25 }}>
+              <motion.div
+                key={role}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.25 }}
+              >
                 {scoredList.length === 0 ? (
                   <div className="py-24 text-center border-2 border-dashed border-[#E4E2DC] rounded-2xl">
                     <p className="text-[#888880] font-semibold">No {role} in the system yet.</p>
-                    <p className="text-[13px] text-[#888880] mt-1">Register some profiles or use "Populate Demo Data" from a previous session.</p>
+                    <p className="text-[13px] text-[#888880] mt-1">Register some profiles first.</p>
                   </div>
                 ) : (
                   <>
-                    {/* Best Fit */}
-                    {best && (
+                    {/* Best Fit — only if top card has score > 0 */}
+                    {scoredList[0]?.score > 0 && (
                       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
                         <p className="text-[11px] font-bold text-[#E8642A] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
                           <Star size={12} className="fill-[#E8642A]" /> Best Fit
                         </p>
-                        <MatchCard item={best} type={role === 'contractors' ? 'contractor' : 'supplier'}
-                          project={project} onAdd={(it, t) => setAddModal({ item: it, type: t })} featured />
+                        <MatchCard
+                          item={scoredList[0]}
+                          type={role === 'contractors' ? 'contractor' : 'supplier'}
+                          project={project}
+                          onAdd={(it, t) => setAddModal({ item: it, type: t })}
+                          featured
+                        />
                       </motion.div>
                     )}
 
                     {/* Rest */}
-                    {rest.length > 0 && (
+                    {scoredList.slice(scoredList[0]?.score > 0 ? 1 : 0).length > 0 && (
                       <>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#888880] mb-3">Other Strong Matches</p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#888880] mb-3">
+                          {scoredList[0]?.score > 0 ? 'Other Matches' : 'All Matches'}
+                        </p>
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                          {rest.map((item, i) => (
-                            <motion.div key={item.id}
+                          {scoredList.slice(scoredList[0]?.score > 0 ? 1 : 0).map((item, i) => (
+                            <motion.div
+                              key={item.id}
                               initial={{ opacity: 0, y: 24 }}
-                              animate={{ opacity: 1, y: 0, transition: { delay: i * 0.07 } }}>
-                              <MatchCard item={item} type={role === 'contractors' ? 'contractor' : 'supplier'}
-                                project={project} onAdd={(it, t) => setAddModal({ item: it, type: t })} />
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: i * 0.07 }}
+                            >
+                              <MatchCard
+                                item={item}
+                                type={role === 'contractors' ? 'contractor' : 'supplier'}
+                                project={project}
+                                onAdd={(it, t) => setAddModal({ item: it, type: t })}
+                              />
                             </motion.div>
                           ))}
                         </div>
@@ -454,3 +606,4 @@ export default function HomeownerProject() {
     </div>
   );
 }
+

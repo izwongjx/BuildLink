@@ -2,14 +2,78 @@ export const INITIAL_CONTRACTORS = [];
 export const INITIAL_SUPPLIERS = [];
 
 export const DEMO_CONTRACTORS = [
-  { id: 1, name: 'Apex Renovations', location: 'Kuala Lumpur', tags: ['Renovation', 'Interior Fit-Out', 'Carpentry', 'Flooring'], rating: 4.8, price: 'Premium' },
-  { id: 2, name: 'Metro Builders', location: 'Petaling Jaya', tags: ['General Contracting', 'Flooring', 'Painting', 'Roofing'], rating: 4.6, price: 'Mid-Range' },
-  { id: 3, name: 'Solid Fix Co.', location: 'Klang', tags: ['Roofing', 'Electrical', 'Plumbing'], rating: 4.2, price: 'Budget' },
+  {
+    id: 1, name: 'Apex Renovations', location: 'Kuala Lumpur',
+    tags: ['Renovation', 'Interior Fit-Out', 'Carpentry', 'Flooring', 'Smart Home Integration'],
+    rating: 4.8, reviews: 42, projects: 124, years: 12,
+    price: 'Premium', avail: 'Available Now', match: 94,
+    role: 'Contractor', coverage: 'Kuala Lumpur, Selangor',
+    about: 'Apex Renovations specialises in high-end residential and commercial fit-outs. With over a decade of experience, we pride ourselves on meticulous attention to detail, transparent pricing, and delivering projects on time.',
+    certs: ['CIDB Registered', 'ISO Certified', 'Insured'],
+    gallery: [
+      { id: 1, title: 'Modern Kitchen', url: 'https://images.unsplash.com/photo-1556910103-1c02745a872f?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Luxury Bathroom', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=1000' },
+      { id: 3, title: 'Living Space', url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&q=80&w=1000' },
+    ],
+  },
+  {
+    id: 2, name: 'Metro Builders', location: 'Petaling Jaya',
+    tags: ['General Contracting', 'Flooring', 'Painting', 'Roofing'],
+    rating: 4.6, reviews: 28, projects: 87, years: 8,
+    price: 'Mid-Range', avail: 'Available Now', match: 85,
+    role: 'Contractor', coverage: 'Petaling Jaya, Subang Jaya, Shah Alam',
+    about: 'Metro Builders delivers reliable mid-range construction and renovation services across the Klang Valley. Quality craftsmanship at fair prices.',
+    certs: ['CIDB Registered', 'Insured'],
+    gallery: [
+      { id: 1, title: 'Roofing Project', url: 'https://images.unsplash.com/photo-1600566752355-35792bedcfea?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Floor Finish', url: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&q=80&w=1000' },
+    ],
+  },
+  {
+    id: 3, name: 'Solid Fix Co.', location: 'Klang',
+    tags: ['Roofing', 'Electrical', 'Plumbing'],
+    rating: 4.2, reviews: 15, projects: 54, years: 5,
+    price: 'Budget', avail: 'Open to New Projects', match: 78,
+    role: 'Contractor', coverage: 'Klang, Port Klang',
+    about: 'Solid Fix Co. specialises in essential home repair and maintenance services including roofing, electrical, and plumbing at budget-friendly rates.',
+    certs: ['CIDB Registered'],
+    gallery: [
+      { id: 1, title: 'Electrical Work', url: 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?auto=format&fit=crop&q=80&w=1000' },
+    ],
+  },
 ];
 
 export const DEMO_SUPPLIERS = [
-  { id: 101, name: 'Lumber Co.', location: 'Selangor', coverage: 'Klang Valley', tags: ['Timber & Wood', 'Doors & Windows'], rating: 4.8, price: 'Mid-Range' },
-  { id: 102, name: 'GlassTech Sdn Bhd', location: 'Kuala Lumpur', coverage: 'Nationwide', tags: ['Glass & Glazing', 'Hardware'], rating: 4.7, price: 'Premium' },
+  {
+    id: 101, name: 'Lumber Co.', location: 'Selangor',
+    coverage: 'Klang Valley, Penang, Johor',
+    tags: ['Timber & Wood', 'Flooring', 'Doors & Windows', 'Plywood', 'MDF'],
+    rating: 4.8, reviews: 128, projects: 500, years: 20,
+    price: 'Wholesale', avail: 'In Stock', match: 92,
+    role: 'Supplier',
+    about: 'Lumber Co. is a premier supplier of high-quality timber, engineered wood, and custom joinery materials. Sourcing sustainably, we provide contractors and builders with reliable, top-grade materials.',
+    certs: ['ISO Certified', 'SIRIM Approved', 'Sustainable Forestry'],
+    products: ['Premium Teak Wood', 'Oak Laminate Flooring', 'Solid Wood Doors', 'Plywood Sheets', 'MDF Boards'],
+    gallery: [
+      { id: 1, title: 'Premium Oak', url: 'https://images.unsplash.com/photo-1550989460-0adf9ea622e2?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Engineered Pine', url: 'https://images.unsplash.com/photo-1616046229478-9901c5536a45?auto=format&fit=crop&q=80&w=1000' },
+    ],
+  },
+  {
+    id: 102, name: 'GlassTech Sdn Bhd', location: 'Kuala Lumpur',
+    coverage: 'Nationwide',
+    tags: ['Glass & Glazing', 'Hardware', 'Aluminium Frames', 'Mirror Works'],
+    rating: 4.7, reviews: 89, projects: 320, years: 15,
+    price: 'Premium', avail: 'In Stock', match: 88,
+    role: 'Supplier',
+    about: 'GlassTech is Malaysia\'s leading glass and glazing solutions provider. We supply premium glass panels, aluminium framing systems, and hardware to contractors nationwide.',
+    certs: ['ISO Certified', 'SIRIM Approved'],
+    products: ['Tempered Glass Panels', 'Aluminium Framing', 'Mirror Sheets', 'Sliding Door Hardware'],
+    gallery: [
+      { id: 1, title: 'Glass Installation', url: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=1000' },
+      { id: 2, title: 'Glazing Works', url: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&q=80&w=1000' },
+    ],
+  },
 ];
 
 export const DEMO_HOMEOWNER_PROJECTS = [
